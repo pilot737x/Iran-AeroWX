@@ -1,0 +1,2627 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Iran AeroWX — Iranian Aviation Weather</title>
+
+  <!-- iOS Progressive Web App Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Iran AeroWX" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0A101D" />
+  <meta name="description" content="Aviation METAR & TAF weather companion exclusively for Iranian airports (ICAO OI**), referenced to IRIMO." />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cockpit: {
+              bg: '#0A101D',
+              card: '#121B2E',
+              elevated: '#17233B',
+              border: '#1E2D4A',
+              accent: '#38BDF8',
+              muted: '#8A9BB8',
+            },
+            flt: {
+              vfr: '#22C55E',
+              mvfr: '#3B82F6',
+              ifr: '#EF4444',
+              lifr: '#D946EF',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Vazirmatn', 'sans-serif'],
+            mono: ['JetBrains Mono', 'SF Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+            persian: ['Vazirmatn', 'Tahoma', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Fonts: Inter, JetBrains Mono, Vazirmatn (for crisp Persian airport names) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* Base Cockpit & iOS Safe Area Ergonomics */
+    :root {
+      --sat: env(safe-area-inset-top, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+      --sal: env(safe-area-inset-left, 0px);
+      --sar: env(safe-area-inset-right, 0px);
+    }
+
+    html, body {
+      background-color: #0A101D;
+      color: #F1F5F9;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior-y: none;
+    }
+
+    .safe-top {
+      padding-top: max(0.75rem, var(--sat));
+    }
+
+    .safe-bottom {
+      padding-bottom: max(0.5rem, var(--sab));
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Subtle Aviation Glassmorphism */
+    .glass-bar {
+      background: rgba(10, 16, 29, 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    /* Hide Scrollbars Cleanly on Pill Rows */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Smooth Slide-up Drawer Transition */
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0.4; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .animate-slide-up {
+      animation: slideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.2s ease-out forwards;
+    }
+
+    @keyframes spinOnce {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .animate-spin-fast {
+      animation: spinOnce 0.65s linear infinite;
+    }
+
+    /* Map Pulse Ring for LIFR/IFR */
+    @keyframes radarPulse {
+      0% { transform: scale(1); opacity: 0.7; }
+      100% { transform: scale(2.4); opacity: 0; }
+    }
+    .pulse-dot {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: radarPulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-cockpit-bg text-slate-100 selection:bg-sky-500/30 selection:text-sky-200 overflow-x-hidden">
+
+  <!-- =========================================================
+       STICKY TOP HEADER (iPhone Safe-Area Aware)
+  ========================================================== -->
+  <header class="sticky top-0 z-30 glass-bar border-b border-cockpit-border safe-top">
+    <div class="max-w-3xl mx-auto px-3.5 pb-2.5">
+      <div class="flex items-center justify-between gap-2">
+        <!-- Brand & Source Badge -->
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500/20 to-blue-600/30 border border-sky-400/30 flex items-center justify-center shrink-0 shadow-inner">
+            <svg class="w-5 h-5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <h1 class="text-base font-bold tracking-tight text-white truncate">Iran AeroWX</h1>
+              <span id="source-badge" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold tracking-wide uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                IRIMO Ref
+              </span>
+            </div>
+            <!-- Live UTC & Tehran IRST Clocks -->
+            <div class="flex items-center gap-2 text-[11px] font-mono tabular-nums text-cockpit-muted mt-0.5">
+              <span class="text-sky-300 font-medium" id="clock-utc">--:--:--Z</span>
+              <span class="text-slate-600">•</span>
+              <span id="clock-irst">IRST --:--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Refresh Action -->
+        <button id="btn-refresh" onclick="handleRefresh()" aria-label="Refresh weather data"
+          class="p-2.5 rounded-xl bg-cockpit-card hover:bg-cockpit-elevated active:scale-95 border border-cockpit-border text-sky-400 transition flex items-center gap-1.5 shrink-0">
+          <svg id="refresh-icon" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+          </svg>
+          <span class="text-xs font-semibold hidden sm:inline">Sync</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- =========================================================
+       MAIN VIEWPORT CONTAINER
+  ========================================================== -->
+  <main class="max-w-3xl mx-auto px-3.5 pt-3 pb-28">
+
+    <!-- ===================== TAB 1: STATIONS ===================== -->
+    <section id="tab-stations" class="space-y-3 animate-fade-in">
+      <!-- Search Bar -->
+      <div class="relative">
+        <div class="absolute inset-y-0 left-3.5 flex items-center pointer-events-none text-cockpit-muted">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+          </svg>
+        </div>
+        <input id="station-search" type="search" autocomplete="off" spellcheck="false"
+          placeholder="Search ICAO (OIII), IATA (THR), English or فارسی..."
+          class="w-full pl-10 pr-10 py-3 rounded-xl bg-cockpit-card border border-cockpit-border text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/50 transition" />
+        <button id="clear-search-btn" onclick="clearSearch()" class="hidden absolute inset-y-0 right-2.5 px-2 text-slate-400 hover:text-white">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Filter Pills & Summary Count -->
+      <div class="flex items-center justify-between gap-2">
+        <div id="filter-pills" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Fleet Weather Summary Strip -->
+      <div id="wx-summary-strip" class="grid grid-cols-4 gap-2 text-center">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Station Cards List -->
+      <div id="stations-list" class="space-y-2.5">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ===================== TAB 2: DECODER & IRIMO IMPORT ===================== -->
+    <section id="tab-decoder" class="hidden space-y-4 animate-fade-in">
+      <!-- IRIMO Source Card -->
+      <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-md bg-sky-500/15 border border-sky-400/30 text-sky-300 text-[10px] font-bold uppercase tracking-wider">Official Reference</span>
+            </div>
+            <h2 class="text-base font-bold text-white mt-1.5">IRIMO Aviation Meteorology</h2>
+            <p class="text-xs text-cockpit-muted mt-0.5 leading-relaxed">
+              Open the Iranian Civil Aviation Meteorological Authority portal, copy raw METAR/TAF bulletins for any Iranian airport (<span class="font-mono text-slate-300">OI**</span>), and paste below to decode and save into your Stations list.
+            </p>
+          </div>
+        </div>
+        <a href="https://www.irimo.ir/far/wd/1218-%D9%87%D9%88%D8%A7%D8%B4%D9%86%D8%A7%D8%B3%DB%8C-%D9%87%D9%88%D8%A7%D9%86%D9%88%D8%B1%D8%AF%DB%8C.html"
+           target="_blank" rel="noopener noreferrer"
+           class="w-full py-3 px-4 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 active:scale-[0.99] border border-sky-400/40 text-sky-300 font-semibold text-sm flex items-center justify-center gap-2 transition">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span>Open IRIMO Aviation Page (irimo.ir)</span>
+        </a>
+      </div>
+
+      <!-- Raw METAR / TAF Paste Box -->
+      <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <label for="decoder-input" class="text-sm font-bold text-white">Paste IRIMO METAR / TAF Bulletins</label>
+          <button onclick="clearDecoderInput()" class="text-xs text-cockpit-muted hover:text-white px-2 py-1 rounded-lg hover:bg-cockpit-elevated transition">Clear</button>
+        </div>
+
+        <!-- Quick Sample Presets -->
+        <div class="space-y-1.5">
+          <span class="text-[11px] uppercase tracking-wider font-semibold text-cockpit-muted">Quick Scenario Presets</span>
+          <div class="flex flex-wrap gap-1.5">
+            <button onclick="loadDecoderPreset('oiaw_dust')" class="px-2.5 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-medium transition">OIAW Dust Storm (IFR)</button>
+            <button onclick="loadDecoderPreset('oiii_gust')" class="px-2.5 py-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 text-xs font-medium transition">OIII Gusty X-Wind (MVFR)</button>
+            <button onclick="loadDecoderPreset('oigg_fog')" class="px-2.5 py-1.5 rounded-lg bg-fuchsia-500/15 hover:bg-fuchsia-500/25 border border-fuchsia-500/30 text-fuchsia-300 text-xs font-medium transition">OIGG Dense Fog (LIFR)</button>
+            <button onclick="loadDecoderPreset('multi_batch')" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-medium transition">Multi-Station Batch</button>
+          </div>
+        </div>
+
+        <textarea id="decoder-input" rows="6" spellcheck="false"
+          placeholder="Example:&#10;METAR OIII 200900Z 26018G28KT 5000 -SHRA SCT025CB BKN040 16/09 Q1014 NOSIG=&#10;TAF OIII 200500Z 2006/2112 25014KT 8000 SCT035 TEMPO 2008/2014 27020G32KT 4000 TSRA BKN025CB"
+          class="w-full p-3 rounded-xl bg-cockpit-bg border border-cockpit-border font-mono text-xs text-sky-100 placeholder-slate-600 focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/50 leading-relaxed"></textarea>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="decodePreviewOnly()"
+            class="py-3 px-3 rounded-xl bg-cockpit-elevated hover:bg-slate-800 active:scale-[0.99] border border-cockpit-border text-slate-200 font-semibold text-xs sm:text-sm transition">
+            Decode Preview
+          </button>
+          <button onclick="parseAndSaveBulletins()"
+            class="py-3 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 active:scale-[0.99] text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-sky-500/20 transition">
+            Parse &amp; Save to Stations
+          </button>
+        </div>
+      </div>
+
+      <!-- Decoded Output Container -->
+      <div id="decoder-results" class="space-y-3"></div>
+    </section>
+
+    <!-- ===================== TAB 3: IRAN MAP ===================== -->
+    <section id="tab-map" class="hidden space-y-3 animate-fade-in">
+      <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-3.5 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-bold text-white">Iran Aviation Weather Map</h2>
+            <p class="text-[11px] text-cockpit-muted">All 30 OI** stations plotted by coordinates</p>
+          </div>
+          <!-- Legend -->
+          <div class="flex items-center gap-2.5 text-[10px] font-bold">
+            <span class="flex items-center gap-1 text-flt-vfr"><span class="w-2 h-2 rounded-full bg-flt-vfr"></span>VFR</span>
+            <span class="flex items-center gap-1 text-flt-mvfr"><span class="w-2 h-2 rounded-full bg-flt-mvfr"></span>MVFR</span>
+            <span class="flex items-center gap-1 text-flt-ifr"><span class="w-2 h-2 rounded-full bg-flt-ifr"></span>IFR</span>
+            <span class="flex items-center gap-1 text-flt-lifr"><span class="w-2 h-2 rounded-full bg-flt-lifr"></span>LIFR</span>
+          </div>
+        </div>
+
+        <!-- Interactive SVG Map of Iran -->
+        <div class="relative rounded-xl bg-[#070C17] border border-cockpit-border overflow-hidden">
+          <svg id="iran-map-svg" viewBox="0 0 640 540" class="w-full h-auto block select-none" role="img" aria-label="Interactive map of Iranian airports">
+            <!-- Rendered dynamically by JS -->
+          </svg>
+          <!-- Map Labels Toggle -->
+          <button id="toggle-map-labels" onclick="toggleMapLabels()"
+            class="absolute top-2.5 right-2.5 px-2.5 py-1.5 rounded-lg bg-cockpit-card/90 border border-cockpit-border text-[11px] font-semibold text-slate-300 hover:text-white backdrop-blur-sm transition">
+            Labels: ON
+          </button>
+        </div>
+
+        <!-- Selected Map Station Preview Card -->
+        <div id="map-selected-card" class="rounded-xl bg-cockpit-bg border border-cockpit-border p-3 transition">
+          <div class="flex items-center justify-between text-xs text-cockpit-muted">
+            <span>Tap any airport dot on the map to inspect weather conditions.</span>
+            <span class="font-mono text-sky-400">30 OI**</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== TAB 4: SETTINGS & PWA ===================== -->
+    <section id="tab-settings" class="hidden space-y-4 animate-fade-in">
+
+      <!-- iPhone Home Screen PWA Install Guide -->
+      <div class="rounded-2xl bg-gradient-to-br from-cockpit-card to-[#15223B] border border-sky-500/30 p-4 space-y-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400 shrink-0">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
+          </div>
+          <div>
+            <h2 class="text-sm font-bold text-white">Install on iPhone Home Screen</h2>
+            <p class="text-[11px] text-sky-300/80">Run Iran AeroWX full-screen like a native cockpit app</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+          <!-- Step 1 -->
+          <div class="rounded-xl bg-cockpit-bg/80 border border-cockpit-border p-3 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-2">
+            <div class="w-8 h-8 rounded-lg bg-sky-500/15 text-sky-400 flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white">1. Tap Safari Share</div>
+              <p class="text-[11px] text-cockpit-muted mt-0.5">Open this app in iOS Safari and tap the Share icon at the bottom bar.</p>
+            </div>
+          </div>
+          <!-- Step 2 -->
+          <div class="rounded-xl bg-cockpit-bg/80 border border-cockpit-border p-3 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-2">
+            <div class="w-8 h-8 rounded-lg bg-sky-500/15 text-sky-400 flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect width="18" height="18" x="3" y="3" rx="3"/><path d="M12 8v8M8 12h8"/></svg>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white">2. Add to Home Screen</div>
+              <p class="text-[11px] text-cockpit-muted mt-0.5">Scroll down the share sheet and tap <span class="text-slate-200 font-medium">Add to Home Screen</span>.</p>
+            </div>
+          </div>
+          <!-- Step 3 -->
+          <div class="rounded-xl bg-cockpit-bg/80 border border-cockpit-border p-3 flex sm:flex-col items-center sm:items-start gap-3 sm:gap-2">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-white">3. Launch Full-Screen</div>
+              <p class="text-[11px] text-cockpit-muted mt-0.5">Tap <span class="text-slate-200 font-medium">Add</span>, then open <span class="text-sky-300">Iran AeroWX</span> from your Home Screen.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unit Preferences -->
+      <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 space-y-3.5">
+        <div>
+          <h2 class="text-sm font-bold text-white">Display Units</h2>
+          <p class="text-[11px] text-cockpit-muted">Applied live across decoded METAR, TAF, cards, and runway components</p>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Wind Speed -->
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-slate-300">Wind Speed</span>
+            <div class="inline-flex rounded-xl bg-cockpit-bg p-1 border border-cockpit-border" data-unit-group="wind">
+              <button onclick="setUnit('wind','kt')" data-val="kt" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">kt</button>
+              <button onclick="setUnit('wind','kmh')" data-val="kmh" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">km/h</button>
+              <button onclick="setUnit('wind','ms')" data-val="ms" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">m/s</button>
+            </div>
+          </div>
+
+          <!-- Pressure -->
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-slate-300">Altimeter / QNH</span>
+            <div class="inline-flex rounded-xl bg-cockpit-bg p-1 border border-cockpit-border" data-unit-group="pressure">
+              <button onclick="setUnit('pressure','hPa')" data-val="hPa" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">hPa</button>
+              <button onclick="setUnit('pressure','inHg')" data-val="inHg" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">inHg</button>
+            </div>
+          </div>
+
+          <!-- Temperature -->
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-slate-300">Temperature</span>
+            <div class="inline-flex rounded-xl bg-cockpit-bg p-1 border border-cockpit-border" data-unit-group="temp">
+              <button onclick="setUnit('temp','C')" data-val="C" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">°C</button>
+              <button onclick="setUnit('temp','F')" data-val="F" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">°F</button>
+            </div>
+          </div>
+
+          <!-- Visibility -->
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-slate-300">Visibility</span>
+            <div class="inline-flex rounded-xl bg-cockpit-bg p-1 border border-cockpit-border" data-unit-group="vis">
+              <button onclick="setUnit('vis','m')" data-val="m" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">m</button>
+              <button onclick="setUnit('vis','km')" data-val="km" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">km</button>
+              <button onclick="setUnit('vis','sm')" data-val="sm" class="unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition">SM</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live IRIMO Backend Proxy Configuration -->
+      <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 space-y-3">
+        <div>
+          <h2 class="text-sm font-bold text-white">Live IRIMO Backend Proxy</h2>
+          <p class="text-xs text-cockpit-muted mt-1 leading-relaxed">
+            Direct browser requests to <span class="font-mono text-slate-300">irimo.ir</span> are typically blocked by browser CORS rules and Iranian geo-IP routing. Connect your own Iranian-hosted JSON proxy endpoint returning <span class="font-mono text-sky-300">{"OIII": {"metar": "...", "taf": "..."}}</span> or raw METAR/TAF text.
+          </p>
+        </div>
+
+        <input id="proxy-url-input" type="url" placeholder="https://your-irimo-proxy.example.ir/api/metar"
+          class="w-full px-3.5 py-2.5 rounded-xl bg-cockpit-bg border border-cockpit-border text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-sky-400" />
+
+        <div class="flex items-center gap-2">
+          <button onclick="saveAndTestProxy()"
+            class="flex-1 py-2.5 px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 text-xs font-bold transition">
+            Test &amp; Fetch Live
+          </button>
+          <button onclick="clearProxyUrl()"
+            class="py-2.5 px-3 rounded-xl bg-cockpit-elevated hover:bg-slate-800 border border-cockpit-border text-slate-300 text-xs font-semibold transition">
+            Reset
+          </button>
+        </div>
+
+        <div id="proxy-status-box" class="hidden rounded-xl p-2.5 text-xs border"></div>
+      </div>
+
+      <!-- Cache & Storage Management -->
+      <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-bold text-white">Local Cache &amp; Notes</h2>
+          <p class="text-[11px] text-cockpit-muted">Reset custom imported bulletins, favorites, notes, and unit settings.</p>
+        </div>
+        <button onclick="openClearCacheModal()"
+          class="px-3.5 py-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-bold shrink-0 transition">
+          Clear Data
+        </button>
+      </div>
+
+      <!-- Official Aviation Disclaimer -->
+      <div class="rounded-2xl bg-amber-500/5 border border-amber-500/20 p-4 space-y-1.5">
+        <div class="flex items-center gap-1.5 text-amber-400 text-xs font-bold uppercase tracking-wider">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>Aviation Safety Disclaimer</span>
+        </div>
+        <p class="text-[11px] text-slate-400 leading-relaxed">
+          Iran AeroWX is a situational awareness, decoding, and training companion. Default bundled bulletins are simulated reference data for offline demonstration until you paste official bulletins from IRIMO or connect a verified live proxy. Pilots in command must always obtain and verify official pre-flight meteorological briefings and NOTAMs through IRIMO / Iran Airports &amp; Air Navigation Company (IAC) AIS channels prior to flight.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <!-- =========================================================
+       FIXED iOS-STYLE BOTTOM TAB BAR
+  ========================================================== -->
+  <nav class="fixed bottom-0 inset-x-0 z-30 glass-bar border-t border-cockpit-border safe-bottom">
+    <div class="max-w-3xl mx-auto grid grid-cols-4 px-2 pt-1.5 pb-1">
+      <button onclick="switchTab('stations')" data-tab="stations" class="nav-tab flex flex-col items-center justify-center py-1.5 rounded-xl transition text-sky-400">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="4"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+        <span class="text-[10px] font-semibold mt-1">Stations</span>
+      </button>
+
+      <button onclick="switchTab('decoder')" data-tab="decoder" class="nav-tab flex flex-col items-center justify-center py-1.5 rounded-xl transition text-slate-400 hover:text-slate-200">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span class="text-[10px] font-semibold mt-1">Decoder</span>
+      </button>
+
+      <button onclick="switchTab('map')" data-tab="map" class="nav-tab flex flex-col items-center justify-center py-1.5 rounded-xl transition text-slate-400 hover:text-slate-200">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+        <span class="text-[10px] font-semibold mt-1">Iran Map</span>
+      </button>
+
+      <button onclick="switchTab('settings')" data-tab="settings" class="nav-tab flex flex-col items-center justify-center py-1.5 rounded-xl transition text-slate-400 hover:text-slate-200">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="text-[10px] font-semibold mt-1">Settings</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- =========================================================
+       STATION DETAIL FULL-HEIGHT DRAWER / MODAL
+  ========================================================== -->
+  <div id="station-drawer" class="fixed inset-0 z-50 hidden">
+    <!-- Backdrop -->
+    <div onclick="closeStationDetail()" class="absolute inset-0 bg-black/75 backdrop-blur-sm"></div>
+
+    <!-- Drawer Sheet -->
+    <div class="relative z-10 h-full max-w-3xl mx-auto flex flex-col bg-cockpit-bg sm:mt-6 sm:h-[calc(100%-1.5rem)] sm:rounded-t-3xl sm:border-x sm:border-t border-cockpit-border overflow-hidden animate-slide-up">
+      <!-- Drawer Sticky Header -->
+      <div class="glass-bar border-b border-cockpit-border px-4 pb-3 safe-top shrink-0">
+        <div class="flex items-start justify-between gap-2 pt-1">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span id="detail-icao" class="font-mono text-xl font-extrabold text-white tracking-wide">OIII</span>
+              <span id="detail-iata" class="font-mono text-xs font-semibold px-1.5 py-0.5 rounded bg-cockpit-elevated text-sky-300 border border-cockpit-border">THR</span>
+              <span id="detail-cat-pill" class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider">VFR</span>
+            </div>
+            <div id="detail-name" class="text-sm font-semibold text-slate-200 truncate mt-0.5">Mehrabad Intl</div>
+            <div class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-cockpit-muted mt-0.5">
+              <span id="detail-persian" class="font-persian text-slate-300">مهرآباد تهران</span>
+              <span>•</span>
+              <span id="detail-elev" class="font-mono">3,962 ft</span>
+              <span>•</span>
+              <span id="detail-coords" class="font-mono">35.69°N 51.31°E</span>
+            </div>
+          </div>
+
+          <!-- Header Actions -->
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button id="detail-fav-btn" onclick="toggleDetailFavorite()" aria-label="Toggle Favorite"
+              class="p-2.5 rounded-xl bg-cockpit-card border border-cockpit-border text-slate-400 hover:text-amber-400 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </button>
+            <button onclick="copyStationRaw()" aria-label="Copy Raw METAR and TAF"
+              class="px-2.5 py-2.5 rounded-xl bg-cockpit-card border border-cockpit-border text-sky-300 hover:bg-cockpit-elevated text-xs font-semibold flex items-center gap-1 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              <span class="hidden sm:inline">Copy</span>
+            </button>
+            <button onclick="closeStationDetail()" aria-label="Close"
+              class="p-2.5 rounded-xl bg-cockpit-elevated hover:bg-slate-700 border border-cockpit-border text-slate-200 transition">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Observation Banner -->
+        <div id="detail-banner" class="mt-2.5 px-3 py-2 rounded-xl border flex items-center justify-between text-xs">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Segmented Control Tabs: Decoded | Raw | Runways | Notes -->
+        <div class="grid grid-cols-4 gap-1 mt-3 p-1 rounded-xl bg-cockpit-card border border-cockpit-border">
+          <button onclick="switchDetailTab('decoded')" data-dtab="decoded" class="detail-tab-btn py-1.5 rounded-lg text-xs font-bold transition">Decoded</button>
+          <button onclick="switchDetailTab('raw')" data-dtab="raw" class="detail-tab-btn py-1.5 rounded-lg text-xs font-bold transition">Raw</button>
+          <button onclick="switchDetailTab('runways')" data-dtab="runways" class="detail-tab-btn py-1.5 rounded-lg text-xs font-bold transition">Runways</button>
+          <button onclick="switchDetailTab('notes')" data-dtab="notes" class="detail-tab-btn py-1.5 rounded-lg text-xs font-bold transition">Notes</button>
+        </div>
+      </div>
+
+      <!-- Drawer Scrollable Body -->
+      <div id="detail-body" class="flex-1 overflow-y-auto px-4 py-4 space-y-4 safe-bottom">
+        <!-- Rendered dynamically by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       CUSTOM CONFIRM MODAL (No window.confirm / alert)
+  ========================================================== -->
+  <div id="confirm-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-4">
+    <div onclick="closeClearCacheModal()" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+    <div class="relative z-10 w-full max-w-sm rounded-2xl bg-cockpit-card border border-cockpit-border p-5 space-y-4 shadow-2xl">
+      <h3 class="text-base font-bold text-white">Clear All Cached Data?</h3>
+      <p class="text-xs text-cockpit-muted leading-relaxed">
+        This will remove imported IRIMO bulletins, saved favorites, pilot notes, proxy URL, and reset units to aviation defaults.
+      </p>
+      <div class="grid grid-cols-2 gap-2.5">
+        <button onclick="closeClearCacheModal()" class="py-2.5 rounded-xl bg-cockpit-elevated hover:bg-slate-700 text-slate-200 text-xs font-semibold transition">Cancel</button>
+        <button onclick="confirmClearAllData()" class="py-2.5 rounded-xl bg-red-500 hover:bg-red-400 text-white text-xs font-bold transition">Clear Everything</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       TOAST NOTIFICATION BANNER
+  ========================================================== -->
+  <div id="toast" class="fixed top-16 left-1/2 -translate-x-1/2 z-[70] pointer-events-none opacity-0 transition-all duration-300">
+    <div id="toast-inner" class="px-4 py-2.5 rounded-xl bg-cockpit-elevated/95 border border-sky-400/40 text-xs font-semibold text-white shadow-xl backdrop-blur-md whitespace-nowrap">
+      Notification
+    </div>
+  </div>
+
+  <!-- =========================================================
+       APPLICATION JAVASCRIPT (Self-Contained, Production-Grade)
+  ========================================================== -->
+  <script>
+    'use strict';
+
+    /* =========================================================================
+       1. DYNAMIC WEB APP MANIFEST (Blob URL, Zero Base64 Images)
+    ========================================================================= */
+    (function registerDynamicManifest() {
+      try {
+        const manifestObj = {
+          name: 'Iran AeroWX — Iranian Aviation Weather',
+          short_name: 'Iran AeroWX',
+          description: 'METAR & TAF weather companion exclusively for Iranian airports (ICAO OI**).',
+          start_url: '.',
+          display: 'standalone',
+          orientation: 'portrait-primary',
+          background_color: '#0A101D',
+          theme_color: '#0A101D',
+          categories: ['weather', 'navigation', 'utilities']
+        };
+        const blob = new Blob([JSON.stringify(manifestObj)], { type: 'application/manifest+json' });
+        const manifestURL = URL.createObjectURL(blob);
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = manifestURL;
+        document.head.appendChild(link);
+      } catch (e) {
+        console.warn('Manifest injection skipped:', e);
+      }
+    })();
+
+    /* =========================================================================
+       2. IRANIAN AIRPORTS DATABASE (STRICTLY IRAN - 30 ICAO OI** AIRPORTS)
+       Includes ICAO, IATA, English Name, Persian Name, City, Lat, Lon,
+       Elevation (ft), and Real Runway Designations + Headings
+    ========================================================================= */
+    const IRAN_AIRPORTS = [
+      { icao: 'OIII', iata: 'THR', name: 'Mehrabad Intl', persian: 'مهرآباد تهران', city: 'Tehran', lat: 35.6892, lon: 51.3134, elev: 3962, runways: [{ id: '29L/11R', ends: [{ name: '29L', hdg: 290 }, { name: '11R', hdg: 110 }] }, { id: '29R/11L', ends: [{ name: '29R', hdg: 290 }, { name: '11L', hdg: 110 }] }] },
+      { icao: 'OIIE', iata: 'IKA', name: 'Imam Khomeini Intl', persian: 'امام خمینی تهران', city: 'Tehran', lat: 35.4161, lon: 51.1522, elev: 3305, runways: [{ id: '29R/11L', ends: [{ name: '29R', hdg: 292 }, { name: '11L', hdg: 112 }] }, { id: '29L/11R', ends: [{ name: '29L', hdg: 292 }, { name: '11R', hdg: 112 }] }] },
+      { icao: 'OIMM', iata: 'MHD', name: 'Mashhad Intl', persian: 'مشهد', city: 'Mashhad', lat: 36.2352, lon: 59.6410, elev: 3263, runways: [{ id: '31R/13L', ends: [{ name: '31R', hdg: 313 }, { name: '13L', hdg: 133 }] }, { id: '31L/13R', ends: [{ name: '31L', hdg: 313 }, { name: '13R', hdg: 133 }] }] },
+      { icao: 'OISS', iata: 'SYZ', name: 'Shiraz Intl', persian: 'شیراز', city: 'Shiraz', lat: 29.5392, lon: 52.5898, elev: 4927, runways: [{ id: '29L/11R', ends: [{ name: '29L', hdg: 294 }, { name: '11R', hdg: 114 }] }, { id: '29R/11L', ends: [{ name: '29R', hdg: 294 }, { name: '11L', hdg: 114 }] }] },
+      { icao: 'OIFM', iata: 'IFN', name: 'Isfahan Intl', persian: 'اصفهان', city: 'Isfahan', lat: 32.7508, lon: 51.8613, elev: 5059, runways: [{ id: '26L/08R', ends: [{ name: '26L', hdg: 259 }, { name: '08R', hdg: 79 }] }, { id: '26R/08L', ends: [{ name: '26R', hdg: 259 }, { name: '08L', hdg: 79 }] }] },
+      { icao: 'OITT', iata: 'TBZ', name: 'Tabriz Intl', persian: 'تبریز', city: 'Tabriz', lat: 38.1339, lon: 46.2350, elev: 4459, runways: [{ id: '30L/12R', ends: [{ name: '30L', hdg: 298 }, { name: '12R', hdg: 118 }] }, { id: '30R/12L', ends: [{ name: '30R', hdg: 298 }, { name: '12L', hdg: 118 }] }] },
+      { icao: 'OIAW', iata: 'AWZ', name: 'Ahvaz Intl', persian: 'اهواز', city: 'Ahvaz', lat: 31.3374, lon: 48.7620, elev: 66, runways: [{ id: '30/12', ends: [{ name: '30', hdg: 301 }, { name: '12', hdg: 121 }] }] },
+      { icao: 'OIKB', iata: 'BND', name: 'Bandar Abbas Intl', persian: 'بندرعباس', city: 'Bandar Abbas', lat: 27.2183, lon: 56.3778, elev: 22, runways: [{ id: '03L/21R', ends: [{ name: '03L', hdg: 31 }, { name: '21R', hdg: 211 }] }, { id: '03R/21L', ends: [{ name: '03R', hdg: 31 }, { name: '21L', hdg: 211 }] }] },
+      { icao: 'OIBK', iata: 'KIH', name: 'Kish Intl', persian: 'کیش', city: 'Kish Island', lat: 26.5262, lon: 53.9802, elev: 101, runways: [{ id: '09L/27R', ends: [{ name: '09L', hdg: 94 }, { name: '27R', hdg: 274 }] }, { id: '09R/27L', ends: [{ name: '09R', hdg: 94 }, { name: '27L', hdg: 274 }] }] },
+      { icao: 'OIKQ', iata: 'GSM', name: 'Qeshm Intl', persian: 'قشم', city: 'Qeshm Island', lat: 26.7546, lon: 55.9024, elev: 45, runways: [{ id: '05/23', ends: [{ name: '05', hdg: 53 }, { name: '23', hdg: 233 }] }] },
+      { icao: 'OIYY', iata: 'AZD', name: 'Yazd Shahid Sadooghi', persian: 'یزد', city: 'Yazd', lat: 31.9049, lon: 54.2765, elev: 4054, runways: [{ id: '31/13', ends: [{ name: '31', hdg: 314 }, { name: '13', hdg: 134 }] }] },
+      { icao: 'OIKK', iata: 'KER', name: 'Kerman Ayatollah Hashemi', persian: 'کرمان', city: 'Kerman', lat: 30.2744, lon: 56.9511, elev: 5741, runways: [{ id: '34/16', ends: [{ name: '34', hdg: 339 }, { name: '16', hdg: 159 }] }] },
+      { icao: 'OIBB', iata: 'BUZ', name: 'Bushehr', persian: 'بوشهر', city: 'Bushehr', lat: 28.9448, lon: 50.8346, elev: 68, runways: [{ id: '31/13', ends: [{ name: '31', hdg: 314 }, { name: '13', hdg: 134 }] }] },
+      { icao: 'OIGG', iata: 'RAS', name: 'Rasht Sardar-e Jangal', persian: 'رشت', city: 'Rasht', lat: 37.3253, lon: 49.6057, elev: -40, runways: [{ id: '09/27', ends: [{ name: '09', hdg: 90 }, { name: '27', hdg: 270 }] }] },
+      { icao: 'OINZ', iata: 'SRY', name: 'Sari Dasht-e Naz', persian: 'ساری', city: 'Sari', lat: 36.6358, lon: 53.1936, elev: 35, runways: [{ id: '07/25', ends: [{ name: '07', hdg: 74 }, { name: '25', hdg: 254 }] }] },
+      { icao: 'OING', iata: 'GBT', name: 'Gorgan', persian: 'گرگان', city: 'Gorgan', lat: 36.9094, lon: 54.4013, elev: -24, runways: [{ id: '13/31', ends: [{ name: '13', hdg: 128 }, { name: '31', hdg: 308 }] }] },
+      { icao: 'OICC', iata: 'KSH', name: 'Kermanshah Shahid Ashrafi', persian: 'کرمانشاه', city: 'Kermanshah', lat: 34.3458, lon: 47.1581, elev: 4337, runways: [{ id: '11/29', ends: [{ name: '11', hdg: 111 }, { name: '29', hdg: 291 }] }] },
+      { icao: 'OITR', iata: 'OMH', name: 'Urmia Shahid Bakeri', persian: 'ارومیه', city: 'Urmia', lat: 37.6681, lon: 45.0687, elev: 4343, runways: [{ id: '03/21', ends: [{ name: '03', hdg: 28 }, { name: '21', hdg: 208 }] }] },
+      { icao: 'OITL', iata: 'ADU', name: 'Ardabil', persian: 'اردبیل', city: 'Ardabil', lat: 38.3257, lon: 48.4244, elev: 4315, runways: [{ id: '15/33', ends: [{ name: '15', hdg: 149 }, { name: '33', hdg: 329 }] }] },
+      { icao: 'OIZH', iata: 'ZAH', name: 'Zahedan Intl', persian: 'زاهدان', city: 'Zahedan', lat: 29.4757, lon: 60.9062, elev: 4564, runways: [{ id: '35/17', ends: [{ name: '35', hdg: 349 }, { name: '17', hdg: 169 }] }] },
+      { icao: 'OIZC', iata: 'ZBR', name: 'Chabahar Konarak', persian: 'چابهار', city: 'Chabahar', lat: 25.4433, lon: 60.3821, elev: 42, runways: [{ id: '09/27', ends: [{ name: '09', hdg: 92 }, { name: '27', hdg: 272 }] }] },
+      { icao: 'OIAA', iata: 'ABD', name: 'Abadan Ayatollah Jami', persian: 'آبادان', city: 'Abadan', lat: 30.3711, lon: 48.2283, elev: 19, runways: [{ id: '32L/14R', ends: [{ name: '32L', hdg: 322 }, { name: '14R', hdg: 142 }] }, { id: '32R/14L', ends: [{ name: '32R', hdg: 322 }, { name: '14L', hdg: 142 }] }] },
+      { icao: 'OIBP', iata: 'PGU', name: 'Asalouyeh Persian Gulf', persian: 'عسلویه', city: 'Asalouyeh', lat: 27.3796, lon: 52.7377, elev: 27, runways: [{ id: '30/12', ends: [{ name: '30', hdg: 303 }, { name: '12', hdg: 123 }] }] },
+      { icao: 'OIMB', iata: 'XBJ', name: 'Birjand', persian: 'بیرجند', city: 'Birjand', lat: 32.8981, lon: 59.2661, elev: 4952, runways: [{ id: '10/28', ends: [{ name: '10', hdg: 100 }, { name: '28', hdg: 280 }] }] },
+      { icao: 'OIHH', iata: 'HDM', name: 'Hamadan', persian: 'همدان', city: 'Hamadan', lat: 34.8692, lon: 48.5525, elev: 5755, runways: [{ id: '01/19', ends: [{ name: '01', hdg: 11 }, { name: '19', hdg: 191 }] }] },
+      { icao: 'OICS', iata: 'SDG', name: 'Sanandaj', persian: 'سنندج', city: 'Sanandaj', lat: 35.2459, lon: 47.0092, elev: 4522, runways: [{ id: '01/19', ends: [{ name: '01', hdg: 7 }, { name: '19', hdg: 187 }] }] },
+      { icao: 'OITZ', iata: 'JWN', name: 'Zanjan', persian: 'زنجان', city: 'Zanjan', lat: 36.7737, lon: 48.3594, elev: 5381, runways: [{ id: '12/30', ends: [{ name: '12', hdg: 123 }, { name: '30', hdg: 303 }] }] },
+      { icao: 'OIIP', iata: 'PYK', name: 'Payam Karaj', persian: 'پیام کرج', city: 'Karaj', lat: 35.7761, lon: 50.8267, elev: 4170, runways: [{ id: '12/30', ends: [{ name: '12', hdg: 121 }, { name: '30', hdg: 301 }] }] },
+      { icao: 'OICK', iata: 'KHD', name: 'Khorramabad', persian: 'خرم‌آباد', city: 'Khorramabad', lat: 33.4354, lon: 48.2829, elev: 3782, runways: [{ id: '11/29', ends: [{ name: '11', hdg: 111 }, { name: '29', hdg: 291 }] }] },
+      { icao: 'OISL', iata: 'LRR', name: 'Lar Intl', persian: 'لار', city: 'Lar', lat: 27.6747, lon: 54.3833, elev: 2641, runways: [{ id: '09/27', ends: [{ name: '09', hdg: 91 }, { name: '27', hdg: 271 }] }] }
+    ];
+
+    const AIRPORT_MAP = Object.fromEntries(IRAN_AIRPORTS.map(a => [a.icao, a]));
+
+    /* =========================================================================
+       3. DYNAMIC REALISTIC DEFAULT IRIMO DATASET (Stamped with Current UTC)
+    ========================================================================= */
+    function pad2(n) { return String(n).padStart(2, '0'); }
+
+    function getUtcStamp(offsetMins = 0) {
+      const d = new Date(Date.now() + offsetMins * 60000);
+      return `${pad2(d.getUTCDate())}${pad2(d.getUTCHours())}${pad2(d.getUTCMinutes())}Z`;
+    }
+
+    function getTafPeriod() {
+      const now = new Date();
+      const issueH = Math.floor(now.getUTCHours() / 6) * 6;
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), issueH, 0));
+      const end = new Date(start.getTime() + 30 * 3600000);
+      const mid1 = new Date(start.getTime() + 6 * 3600000);
+      const mid2 = new Date(start.getTime() + 12 * 3600000);
+      const mid3 = new Date(start.getTime() + 18 * 3600000);
+      return {
+        issue: `${pad2(start.getUTCDate())}${pad2(Math.max(0, start.getUTCHours() - 1))}00Z`,
+        valid: `${pad2(start.getUTCDate())}${pad2(start.getUTCHours())}/${pad2(end.getUTCDate())}${pad2(end.getUTCHours())}`,
+        p1: `${pad2(mid1.getUTCDate())}${pad2(mid1.getUTCHours())}/${pad2(mid2.getUTCDate())}${pad2(mid2.getUTCHours())}`,
+        p2: `${pad2(mid2.getUTCDate())}${pad2(mid2.getUTCHours())}/${pad2(mid3.getUTCDate())}${pad2(mid3.getUTCHours())}`
+      };
+    }
+
+    function buildDefaultDataset() {
+      const t0 = getUtcStamp(-12);
+      const t1 = getUtcStamp(-24);
+      const t2 = getUtcStamp(-38);
+      const tf = getTafPeriod();
+
+      // Diverse, geographically realistic weather across Iran (VFR, MVFR, IFR, LIFR)
+      const templates = {
+        OIII: {
+          metar: `METAR OIII ${t0} 26014G24KT 230V290 7000 FEW035TCU SCT050 15/05 Q1016 NOSIG`,
+          taf: `TAF OIII ${tf.issue} ${tf.valid} 26012KT 8000 SCT040 TEMPO ${tf.p1} 28018G28KT 5000 -SHRA SCT030CB BKN045 BECMG ${tf.p2} 31008KT CAVOK`
+        },
+        OIIE: {
+          metar: `METAR OIIE ${t0} 27012KT CAVOK 16/04 Q1015 NOSIG`,
+          taf: `TAF OIIE ${tf.issue} ${tf.valid} 27010KT CAVOK TEMPO ${tf.p1} 29016G26KT 7000 SCT045 BECMG ${tf.p2} 30006KT CAVOK`
+        },
+        OIMM: {
+          metar: `METAR OIMM ${t1} 12008KT 9999 FEW045 SCT090 12/01 Q1021 NOSIG`,
+          taf: `TAF OIMM ${tf.issue} ${tf.valid} 11008KT 9999 FEW045 BECMG ${tf.p1} 31012KT 8000 SCT040 PROB30 TEMPO ${tf.p2} 5000 -RA BKN030`
+        },
+        OISS: {
+          metar: `METAR OISS ${t0} 29011KT CAVOK 19/02 Q1017 NOSIG`,
+          taf: `TAF OISS ${tf.issue} ${tf.valid} 29010KT CAVOK BECMG ${tf.p1} 30014KT 9999 FEW050`
+        },
+        OIFM: {
+          metar: `METAR OIFM ${t1} 25009KT 9999 FEW055 16/M01 Q1018 NOSIG`,
+          taf: `TAF OIFM ${tf.issue} ${tf.valid} 25008KT CAVOK TEMPO ${tf.p1} 27015KT 7000 DU FEW060`
+        },
+        OITT: {
+          metar: `METAR OITT ${t0} 08012KT 4500 -RA BR SCT014 BKN022 06/04 Q1014 TEMPO 3000 RA BKN012`,
+          taf: `TAF OITT ${tf.issue} ${tf.valid} 08012KT 5000 -RA BR BKN020 TEMPO ${tf.p1} 2500 RA BKN010 BECMG ${tf.p2} 29010KT 8000 SCT030`
+        },
+        OIAW: {
+          metar: `METAR OIAW ${t0} 31020G31KT 1800 BLDU BKN035 27/06 Q1011 TEMPO 1000 DS`,
+          taf: `TAF OIAW ${tf.issue} ${tf.valid} 31018G28KT 2000 BLDU SCT040 TEMPO ${tf.p1} 0800 DS BECMG ${tf.p2} 32012KT 5000 DU NSC`
+        },
+        OIKB: {
+          metar: `METAR OIKB ${t1} 19010KT 8000 HZ FEW025 29/21 Q1013 NOSIG`,
+          taf: `TAF OIKB ${tf.issue} ${tf.valid} 19010KT 8000 HZ FEW025 BECMG ${tf.p1} 21012KT 9999 FEW030 TEMPO ${tf.p2} 5000 BR`
+        },
+        OIBK: {
+          metar: `METAR OIBK ${t0} 28013KT 9999 FEW028 28/20 Q1012 NOSIG`,
+          taf: `TAF OIBK ${tf.issue} ${tf.valid} 28012KT 9999 FEW028 TEMPO ${tf.p1} 30016KT 7000 HZ`
+        },
+        OIKQ: {
+          metar: `METAR OIKQ ${t2} 22009KT 9000 FEW022 28/21 Q1013 NOSIG`,
+          taf: `TAF OIKQ ${tf.issue} ${tf.valid} 22009KT 9999 FEW025 TEMPO ${tf.p1} 6000 HZ`
+        },
+        OIYY: {
+          metar: `METAR OIYY ${t1} 32011KT CAVOK 18/M02 Q1017 NOSIG`,
+          taf: `TAF OIYY ${tf.issue} ${tf.valid} 32010KT CAVOK TEMPO ${tf.p1} 33018KT 6000 BLDU`
+        },
+        OIKK: {
+          metar: `METAR OIKK ${t1} 34014KT 9999 FEW050 15/M03 Q1019 NOSIG`,
+          taf: `TAF OIKK ${tf.issue} ${tf.valid} 34012KT CAVOK BECMG ${tf.p1} 35016KT 8000 FEW050`
+        },
+        OIBB: {
+          metar: `METAR OIBB ${t0} 31016KT 5000 HZ FEW020 26/18 Q1012 NOSIG`,
+          taf: `TAF OIBB ${tf.issue} ${tf.valid} 31015KT 5000 HZ FEW020 TEMPO ${tf.p1} 32020G28KT 3000 BLSA BECMG ${tf.p2} 31010KT 8000 NSC`
+        },
+        OIGG: {
+          metar: `METAR OIGG ${t0} 04004KT 0450 FG VV002 11/11 Q1022 TEMPO 0300 FG`,
+          taf: `TAF OIGG ${tf.issue} ${tf.valid} 04005KT 0500 FG VV002 BECMG ${tf.p1} 07006KT 2500 BR BKN008 TEMPO ${tf.p2} 5000 -DZ BKN012`
+        },
+        OINZ: {
+          metar: `METAR OINZ ${t1} 06007KT 3200 BR -DZ SCT008 OVC012 13/12 Q1021 NOSIG`,
+          taf: `TAF OINZ ${tf.issue} ${tf.valid} 06008KT 3500 BR OVC012 TEMPO ${tf.p1} 1800 -RA BKN007 BECMG ${tf.p2} 09006KT 6000 BKN020`
+        },
+        OING: {
+          metar: `METAR OING ${t2} 31006KT 4000 BR BKN015 OVC025 14/12 Q1020 NOSIG`,
+          taf: `TAF OING ${tf.issue} ${tf.valid} 31006KT 4500 BR BKN015 BECMG ${tf.p1} 29008KT 8000 SCT025`
+        },
+        OICC: {
+          metar: `METAR OICC ${t1} 24011KT 6000 -SHRA SCT025 BKN040 11/06 Q1015 NOSIG`,
+          taf: `TAF OICC ${tf.issue} ${tf.valid} 24010KT 7000 SCT028 TEMPO ${tf.p1} 26015KT 4000 SHRA BKN020CB`
+        },
+        OITR: {
+          metar: `METAR OITR ${t0} 03008KT 1400 -SN BR BKN006 OVC010 01/00 Q1016 TEMPO 0800 SN`,
+          taf: `TAF OITR ${tf.issue} ${tf.valid} 03008KT 1500 -SN BR OVC007 TEMPO ${tf.p1} 0800 SN VV004 BECMG ${tf.p2} 21006KT 5000 BR BKN018`
+        },
+        OITL: {
+          metar: `METAR OITL ${t0} 06010KT 0600 FG BKN003 OVC005 03/03 Q1019 NOSIG`,
+          taf: `TAF OITL ${tf.issue} ${tf.valid} 06010KT 0600 FG OVC003 BECMG ${tf.p1} 08012KT 3000 BR BKN010 PROB40 TEMPO ${tf.p2} 1500 -RA BKN006`
+        },
+        OIZH: {
+          metar: `METAR OIZH ${t1} 35017G26KT 4000 BLDU FEW060 20/M04 Q1016 NOSIG`,
+          taf: `TAF OIZH ${tf.issue} ${tf.valid} 35016G25KT 4500 BLDU FEW060 BECMG ${tf.p1} 35010KT 9999 NSC`
+        },
+        OIZC: {
+          metar: `METAR OIZC ${t2} 17008KT 9999 FEW020 29/22 Q1012 NOSIG`,
+          taf: `TAF OIZC ${tf.issue} ${tf.valid} 17008KT 9999 FEW020 BECMG ${tf.p1} 20012KT 9999 SCT025`
+        },
+        OIAA: {
+          metar: `METAR OIAA ${t0} 32018G27KT 2200 BLDU SCT040 26/08 Q1011 NOSIG`,
+          taf: `TAF OIAA ${tf.issue} ${tf.valid} 32018G28KT 2500 BLDU SCT040 TEMPO ${tf.p1} 1200 DS BECMG ${tf.p2} 33010KT 6000 DU NSC`
+        },
+        OIBP: {
+          metar: `METAR OIBP ${t1} 30014KT 7000 HZ FEW025 27/19 Q1012 NOSIG`,
+          taf: `TAF OIBP ${tf.issue} ${tf.valid} 30014KT 7000 HZ FEW025 TEMPO ${tf.p1} 31018KT 5000 HZ`
+        },
+        OIMB: {
+          metar: `METAR OIMB ${t2} 10007KT CAVOK 14/M03 Q1020 NOSIG`,
+          taf: `TAF OIMB ${tf.issue} ${tf.valid} 10007KT CAVOK BECMG ${tf.p1} 28010KT CAVOK`
+        },
+        OIHH: {
+          metar: `METAR OIHH ${t1} 22010KT 8000 SCT035 BKN060 08/02 Q1016 NOSIG`,
+          taf: `TAF OIHH ${tf.issue} ${tf.valid} 22010KT 8000 SCT035 TEMPO ${tf.p1} 4500 -SHRA BKN022`
+        },
+        OICS: {
+          metar: `METAR OICS ${t1} 19009KT 5000 -RA SCT018 BKN028 09/06 Q1015 NOSIG`,
+          taf: `TAF OICS ${tf.issue} ${tf.valid} 19010KT 5000 -RA BKN025 TEMPO ${tf.p1} 3000 RA BKN015`
+        },
+        OITZ: {
+          metar: `METAR OITZ ${t1} 27012KT 6000 SCT020 BKN035 07/03 Q1017 NOSIG`,
+          taf: `TAF OITZ ${tf.issue} ${tf.valid} 27012KT 7000 SCT025 TEMPO ${tf.p1} 4000 -SHRA BKN018`
+        },
+        OIIP: {
+          metar: `METAR OIIP ${t0} 28013G22KT 9000 FEW035 SCT055 14/04 Q1016 NOSIG`,
+          taf: `TAF OIIP ${tf.issue} ${tf.valid} 28012KT 9000 SCT040 TEMPO ${tf.p1} 29018G26KT 6000 -SHRA BKN030`
+        },
+        OICK: {
+          metar: `METAR OICK ${t2} 26008KT 9999 SCT040 BKN070 13/05 Q1016 NOSIG`,
+          taf: `TAF OICK ${tf.issue} ${tf.valid} 26008KT 9999 SCT040 TEMPO ${tf.p1} 5000 -SHRA BKN028`
+        },
+        OISL: {
+          metar: `METAR OISL ${t2} 27009KT CAVOK 24/08 Q1014 NOSIG`,
+          taf: `TAF OISL ${tf.issue} ${tf.valid} 27009KT CAVOK BECMG ${tf.p1} 28012KT 9999 FEW045`
+        }
+      };
+
+      const result = {};
+      for (const ap of IRAN_AIRPORTS) {
+        result[ap.icao] = {
+          metar: templates[ap.icao].metar,
+          taf: templates[ap.icao].taf,
+          source: 'IRIMO Ref',
+          updatedAt: Date.now()
+        };
+      }
+      return result;
+    }
+
+    /* =========================================================================
+       4. APPLICATION STATE & LOCALSTORAGE PERSISTENCE
+    ========================================================================= */
+    const STORAGE_KEYS = {
+      WEATHER: 'iran_aerowx_weather_v1',
+      FAVORITES: 'iran_aerowx_favorites_v1',
+      NOTES: 'iran_aerowx_notes_v1',
+      UNITS: 'iran_aerowx_units_v1',
+      PROXY: 'iran_aerowx_proxy_v1'
+    };
+
+    const DEFAULT_UNITS = { wind: 'kt', pressure: 'hPa', temp: 'C', vis: 'm' };
+
+    const state = {
+      activeTab: 'stations',
+      filter: 'ALL',
+      search: '',
+      favorites: ['OIII', 'OIIE', 'OIMM', 'OISS', 'OIFM'],
+      notes: {},
+      units: { ...DEFAULT_UNITS },
+      proxyUrl: '',
+      weatherData: {},
+      dataSourceLabel: 'IRIMO Ref',
+      selectedIcao: null,
+      detailTab: 'decoded',
+      selectedRunwayIdx: 0,
+      mapSelectedIcao: 'OIII',
+      showMapLabels: true
+    };
+
+    function loadState() {
+      try {
+        const savedFavs = localStorage.getItem(STORAGE_KEYS.FAVORITES);
+        if (savedFavs) state.favorites = JSON.parse(savedFavs);
+
+        const savedNotes = localStorage.getItem(STORAGE_KEYS.NOTES);
+        if (savedNotes) state.notes = JSON.parse(savedNotes);
+
+        const savedUnits = localStorage.getItem(STORAGE_KEYS.UNITS);
+        if (savedUnits) state.units = { ...DEFAULT_UNITS, ...JSON.parse(savedUnits) };
+
+        const savedProxy = localStorage.getItem(STORAGE_KEYS.PROXY);
+        if (savedProxy) state.proxyUrl = savedProxy;
+
+        const savedWx = localStorage.getItem(STORAGE_KEYS.WEATHER);
+        const defaults = buildDefaultDataset();
+        if (savedWx) {
+          const parsed = JSON.parse(savedWx);
+          state.weatherData = { ...defaults, ...parsed };
+          const hasCustom = Object.values(state.weatherData).some(w => w.source && w.source !== 'IRIMO Ref');
+          if (hasCustom) state.dataSourceLabel = 'IRIMO Imported';
+        } else {
+          state.weatherData = defaults;
+        }
+      } catch (err) {
+        console.error('State load error, using defaults:', err);
+        state.weatherData = buildDefaultDataset();
+      }
+    }
+
+    function saveWeatherToStorage() {
+      try { localStorage.setItem(STORAGE_KEYS.WEATHER, JSON.stringify(state.weatherData)); } catch (e) {}
+    }
+    function saveFavoritesToStorage() {
+      try { localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(state.favorites)); } catch (e) {}
+    }
+    function saveNotesToStorage() {
+      try { localStorage.setItem(STORAGE_KEYS.NOTES, JSON.stringify(state.notes)); } catch (e) {}
+    }
+    function saveUnitsToStorage() {
+      try { localStorage.setItem(STORAGE_KEYS.UNITS, JSON.stringify(state.units)); } catch (e) {}
+    }
+
+    /* =========================================================================
+       5. FULL CLIENT-SIDE ICAO METAR & TAF PARSER
+    ========================================================================= */
+    const WX_INTENSITY = { '-': 'Light', '+': 'Heavy', 'VC': 'In Vicinity' };
+    const WX_DESC = {
+      MI: 'Shallow', PR: 'Partial', BC: 'Patches', DR: 'Low Drifting',
+      BL: 'Blowing', SH: 'Showers', TS: 'Thunderstorm', FZ: 'Freezing'
+    };
+    const WX_PHENOMENA = {
+      DZ: 'Drizzle', RA: 'Rain', SN: 'Snow', SG: 'Snow Grains', IC: 'Ice Crystals',
+      PL: 'Ice Pellets', GR: 'Hail', GS: 'Small Hail', UP: 'Unknown Precip',
+      BR: 'Mist', FG: 'Fog', FU: 'Smoke', VA: 'Volcanic Ash', DU: 'Widespread Dust',
+      SA: 'Sand', HZ: 'Haze', PY: 'Spray', PO: 'Dust Whirls', SQ: 'Squalls',
+      FC: 'Funnel Cloud', SS: 'Sandstorm', DS: 'Duststorm'
+    };
+
+    const CLOUD_MAP = {
+      FEW: 'Few (1-2/8)',
+      SCT: 'Scattered (3-4/8)',
+      BKN: 'Broken (5-7/8)',
+      OVC: 'Overcast (8/8)',
+      VV: 'Vertical Visibility'
+    };
+
+    function decodeWeatherToken(token) {
+      const rx = /^(\+|-|VC)?(MI|PR|BC|DR|BL|SH|TS|FZ)?((?:DZ|RA|SN|SG|IC|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PY|PO|SQ|FC|SS|DS)+)$/;
+      const m = token.match(rx);
+      if (!m) return null;
+      const parts = [];
+      if (m[1]) parts.push(WX_INTENSITY[m[1]]);
+      if (m[2]) parts.push(WX_DESC[m[2]]);
+      const phenStr = m[3];
+      for (let i = 0; i < phenStr.length; i += 2) {
+        const code = phenStr.slice(i, i + 2);
+        if (WX_PHENOMENA[code]) parts.push(WX_PHENOMENA[code]);
+      }
+      return { raw: token, text: parts.join(' ') };
+    }
+
+    function computeFlightCategory(visMeters, ceilingFt) {
+      // Standard FAA/ICAO Flight Category thresholds
+      const vis = visMeters !== null ? visMeters : 10000;
+      const ceil = ceilingFt !== null ? ceilingFt : 99999;
+
+      if (ceil < 500 || vis < 1600) return 'LIFR';
+      if (ceil < 1000 || vis < 4800) return 'IFR';
+      if (ceil <= 3000 || vis <= 8000) return 'MVFR';
+      return 'VFR';
+    }
+
+    function getCategoryMeta(cat) {
+      const map = {
+        VFR:  { color: '#22C55E', bg: 'bg-emerald-500/15', border: 'border-emerald-500/40', text: 'text-emerald-400', label: 'VFR — Visual Flight Rules' },
+        MVFR: { color: '#3B82F6', bg: 'bg-blue-500/15',    border: 'border-blue-500/40',    text: 'text-blue-400',    label: 'MVFR — Marginal VFR' },
+        IFR:  { color: '#EF4444', bg: 'bg-red-500/15',     border: 'border-red-500/40',     text: 'text-red-400',     label: 'IFR — Instrument Flight Rules' },
+        LIFR: { color: '#D946EF', bg: 'bg-fuchsia-500/15', border: 'border-fuchsia-500/40', text: 'text-fuchsia-400', label: 'LIFR — Low IFR' }
+      };
+      return map[cat] || map.VFR;
+    }
+
+    /**
+     * Parses a raw ICAO METAR / SPECI string into structured weather & performance telemetry.
+     */
+    function parseMETAR(rawStr, airportElevFt = 0) {
+      const clean = (rawStr || '').replace(/=$/, '').replace(/\s+/g, ' ').trim();
+      const tokens = clean.split(' ');
+      const res = {
+        raw: clean,
+        type: 'METAR',
+        icao: null,
+        obsTime: null,
+        obsAgeMins: null,
+        isAuto: false,
+        wind: { dir: null, speedKt: null, gustKt: null, variable: false, varFrom: null, varTo: null, calm: false, raw: null },
+        visMeters: null,
+        visRaw: null,
+        cavok: false,
+        rvr: [],
+        weather: [],
+        clouds: [],
+        ceilingFt: null,
+        tempC: null,
+        dewC: null,
+        spreadC: null,
+        rhPercent: null,
+        qnhHpa: null,
+        qnhInHg: null,
+        pressureAltFt: null,
+        densityAltFt: null,
+        trend: null,
+        remarks: null,
+        category: 'VFR'
+      };
+
+      if (!clean) return res;
+
+      // Extract RMK section first
+      const rmkIdx = tokens.indexOf('RMK');
+      let mainTokens = tokens;
+      if (rmkIdx !== -1) {
+        res.remarks = tokens.slice(rmkIdx + 1).join(' ');
+        mainTokens = tokens.slice(0, rmkIdx);
+      }
+
+      // Extract trailing trend (NOSIG, TEMPO, BECMG)
+      let trendIdx = -1;
+      for (let i = 3; i < mainTokens.length; i++) {
+        if (['NOSIG', 'TEMPO', 'BECMG'].includes(mainTokens[i])) {
+          trendIdx = i;
+          break;
+        }
+      }
+      if (trendIdx !== -1) {
+        res.trend = mainTokens.slice(trendIdx).join(' ');
+        mainTokens = mainTokens.slice(0, trendIdx);
+      }
+
+      for (let i = 0; i < mainTokens.length; i++) {
+        const t = mainTokens[i];
+
+        if (i === 0 && (t === 'METAR' || t === 'SPECI')) { res.type = t; continue; }
+        if (t === 'AUTO') { res.isAuto = true; continue; }
+        if (t === 'COR') { continue; }
+
+        // ICAO Station
+        if (!res.icao && /^[A-Z]{4}$/.test(t) && !['AUTO', 'CAVOK', 'NOSIG', 'NSC', 'SKC', 'CLR'].includes(t)) {
+          res.icao = t;
+          continue;
+        }
+
+        // Observation Time DDHHMMZ
+        if (!res.obsTime && /^\d{6}Z$/.test(t)) {
+          res.obsTime = t;
+          const day = parseInt(t.slice(0, 2), 10);
+          const hr = parseInt(t.slice(2, 4), 10);
+          const mn = parseInt(t.slice(4, 6), 10);
+          const now = new Date();
+          let obsDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, hr, mn));
+          // Handle month boundary wrap
+          if (obsDate.getTime() - now.getTime() > 48 * 3600000) {
+            obsDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, day, hr, mn));
+          }
+          res.obsAgeMins = Math.max(0, Math.round((now.getTime() - obsDate.getTime()) / 60000));
+          continue;
+        }
+
+        // Wind Group
+        const windMatch = t.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS|KMH)$/);
+        if (windMatch && res.wind.raw === null) {
+          const unit = windMatch[4];
+          const toKt = (v) => {
+            if (v === null || v === undefined) return null;
+            const n = parseInt(v, 10);
+            if (unit === 'MPS') return Math.round(n * 1.94384);
+            if (unit === 'KMH') return Math.round(n * 0.539957);
+            return n;
+          };
+          res.wind.raw = t;
+          res.wind.speedKt = toKt(windMatch[2]);
+          res.wind.gustKt = windMatch[3] ? toKt(windMatch[3]) : null;
+          if (windMatch[1] === 'VRB') {
+            res.wind.variable = true;
+          } else {
+            res.wind.dir = parseInt(windMatch[1], 10);
+            if (res.wind.dir === 0 && res.wind.speedKt === 0) res.wind.calm = true;
+          }
+          continue;
+        }
+
+        // Wind direction variation dddVddd
+        const varMatch = t.match(/^(\d{3})V(\d{3})$/);
+        if (varMatch) {
+          res.wind.varFrom = parseInt(varMatch[1], 10);
+          res.wind.varTo = parseInt(varMatch[2], 10);
+          continue;
+        }
+
+        // CAVOK
+        if (t === 'CAVOK') {
+          res.cavok = true;
+          res.visMeters = 10000;
+          res.visRaw = 'CAVOK';
+          continue;
+        }
+
+        // Visibility in meters (4 digits)
+        if (res.visMeters === null && /^\d{4}(?:N|NE|E|SE|S|SW|W|NW)?$/.test(t)) {
+          const meters = parseInt(t.slice(0, 4), 10);
+          res.visMeters = meters === 9999 ? 10000 : meters;
+          res.visRaw = t;
+          continue;
+        }
+
+        // Visibility in Statute Miles
+        const smMatch = t.match(/^(\d+(?:\/\d+)?|\d+\/\d+)SM$/);
+        if (res.visMeters === null && smMatch) {
+          let val = 10;
+          if (smMatch[1].includes('/')) {
+            const [a, b] = smMatch[1].split('/').map(Number);
+            val = a / b;
+          } else {
+            val = parseFloat(smMatch[1]);
+          }
+          res.visMeters = Math.round(val * 1609.34);
+          res.visRaw = t;
+          continue;
+        }
+
+        // RVR
+        if (/^R\d{2}[LRC]?\/[PM]?\d{4}/.test(t)) {
+          res.rvr.push(t);
+          continue;
+        }
+
+        // Cloud Layers
+        const cldMatch = t.match(/^(FEW|SCT|BKN|OVC|VV)(\d{3}|\/\/\/)(CB|TCU)?$/);
+        if (cldMatch) {
+          const cover = cldMatch[1];
+          const altFt = cldMatch[2] === '///' ? null : parseInt(cldMatch[2], 10) * 100;
+          const modifier = cldMatch[3] || null;
+          res.clouds.push({ cover, altFt, modifier, raw: t });
+          if (['BKN', 'OVC', 'VV'].includes(cover) && altFt !== null) {
+            if (res.ceilingFt === null || altFt < res.ceilingFt) res.ceilingFt = altFt;
+          }
+          continue;
+        }
+        if (['NSC', 'SKC', 'CLR', 'NCD'].includes(t)) {
+          res.clouds.push({ cover: t, altFt: null, modifier: null, raw: t });
+          continue;
+        }
+
+        // Temperature / Dewpoint (e.g. 15/05 or M02/M07)
+        const tempMatch = t.match(/^(M?\d{2})\/(M?\d{2}|\/\/)$/);
+        if (tempMatch && res.tempC === null) {
+          const parseT = (s) => s === '//' ? null : (s.startsWith('M') ? -parseInt(s.slice(1), 10) : parseInt(s, 10));
+          res.tempC = parseT(tempMatch[1]);
+          res.dewC = parseT(tempMatch[2]);
+          if (res.tempC !== null && res.dewC !== null) {
+            res.spreadC = res.tempC - res.dewC;
+            const rh = 100 * Math.exp((17.625 * res.dewC) / (243.04 + res.dewC)) / Math.exp((17.625 * res.tempC) / (243.04 + res.tempC));
+            res.rhPercent = Math.min(100, Math.max(1, Math.round(rh)));
+          }
+          continue;
+        }
+
+        // QNH (hPa) or Altimeter (inHg)
+        const qnhMatch = t.match(/^Q(\d{4})$/);
+        if (qnhMatch) {
+          res.qnhHpa = parseInt(qnhMatch[1], 10);
+          res.qnhInHg = +(res.qnhHpa * 0.029529983).toFixed(2);
+          continue;
+        }
+        const altMatch = t.match(/^A(\d{4})$/);
+        if (altMatch) {
+          res.qnhInHg = +(parseInt(altMatch[1], 10) / 100).toFixed(2);
+          res.qnhHpa = Math.round(res.qnhInHg / 0.029529983);
+          continue;
+        }
+
+        // Present Weather Phenomena
+        const wx = decodeWeatherToken(t);
+        if (wx) {
+          res.weather.push(wx);
+          continue;
+        }
+      }
+
+      // Compute Pressure Altitude & Density Altitude
+      if (res.qnhHpa !== null) {
+        res.pressureAltFt = Math.round(airportElevFt + (1013.25 - res.qnhHpa) * 27.3);
+        if (res.tempC !== null) {
+          const isaTempC = 15 - (airportElevFt / 1000) * 1.98;
+          res.densityAltFt = Math.round(res.pressureAltFt + 120 * (res.tempC - isaTempC));
+        }
+      }
+
+      res.category = computeFlightCategory(res.visMeters, res.ceilingFt);
+      return res;
+    }
+
+    /**
+     * Parses a raw ICAO TAF string into validity info and structured forecast change groups.
+     */
+    function parseTAF(rawStr) {
+      const clean = (rawStr || '').replace(/=$/, '').replace(/\s+/g, ' ').trim();
+      const res = {
+        raw: clean,
+        icao: null,
+        issueTime: null,
+        validPeriod: null,
+        maxTemp: null,
+        minTemp: null,
+        groups: []
+      };
+      if (!clean) return res;
+
+      const tokens = clean.split(' ');
+      let idx = 0;
+      if (tokens[idx] === 'TAF') idx++;
+      if (tokens[idx] === 'AMD' || tokens[idx] === 'COR') idx++;
+      if (tokens[idx] && /^[A-Z]{4}$/.test(tokens[idx])) { res.icao = tokens[idx]; idx++; }
+      if (tokens[idx] && /^\d{6}Z$/.test(tokens[idx])) { res.issueTime = tokens[idx]; idx++; }
+      if (tokens[idx] && /^\d{4}\/\d{4}$/.test(tokens[idx])) { res.validPeriod = tokens[idx]; idx++; }
+
+      const bodyTokens = tokens.slice(idx);
+      const rawGroups = [];
+      let current = { type: 'INITIAL', period: res.validPeriod || '', tokens: [] };
+
+      for (let i = 0; i < bodyTokens.length; i++) {
+        const t = bodyTokens[i];
+
+        // TX / TN forecast temps
+        const txM = t.match(/^TX(M?\d{2})\/(\d{4})Z$/);
+        if (txM) { res.maxTemp = { tempC: txM[1].startsWith('M') ? -parseInt(txM[1].slice(1), 10) : parseInt(txM[1], 10), time: txM[2] + 'Z' }; continue; }
+        const tnM = t.match(/^TN(M?\d{2})\/(\d{4})Z$/);
+        if (tnM) { res.minTemp = { tempC: tnM[1].startsWith('M') ? -parseInt(tnM[1].slice(1), 10) : parseInt(tnM[1], 10), time: tnM[2] + 'Z' }; continue; }
+
+        // Detect Change Group Boundaries
+        if ((t === 'PROB30' || t === 'PROB40') && (bodyTokens[i + 1] === 'TEMPO' || bodyTokens[i + 1] === 'BECMG')) {
+          rawGroups.push(current);
+          const grpType = `${t} ${bodyTokens[i + 1]}`;
+          i++;
+          let per = '';
+          if (bodyTokens[i + 1] && /^\d{4}\/\d{4}$/.test(bodyTokens[i + 1])) { per = bodyTokens[++i]; }
+          current = { type: grpType, period: per, tokens: [] };
+        } else if (['BECMG', 'TEMPO', 'PROB30', 'PROB40'].includes(t)) {
+          rawGroups.push(current);
+          let per = '';
+          if (bodyTokens[i + 1] && /^\d{4}\/\d{4}$/.test(bodyTokens[i + 1])) { per = bodyTokens[++i]; }
+          current = { type: t, period: per, tokens: [] };
+        } else if (/^FM\d{6}$/.test(t)) {
+          rawGroups.push(current);
+          current = { type: 'FM', period: `From ${t.slice(2, 4)}/${t.slice(4, 6)}:${t.slice(6, 8)}Z`, tokens: [] };
+        } else {
+          current.tokens.push(t);
+        }
+      }
+      rawGroups.push(current);
+
+      // Decode each group using METAR token parser logic
+      res.groups = rawGroups
+        .filter(g => g.tokens.length > 0)
+        .map(g => {
+          const fakeMetar = `METAR ${res.icao || 'OIII'} 010000Z ${g.tokens.join(' ')}`;
+          const decoded = parseMETAR(fakeMetar, 0);
+          return {
+            type: g.type,
+            period: formatTafPeriod(g.period),
+            raw: g.tokens.join(' '),
+            wind: decoded.wind,
+            visMeters: decoded.visMeters,
+            cavok: decoded.cavok,
+            weather: decoded.weather,
+            clouds: decoded.clouds,
+            ceilingFt: decoded.ceilingFt,
+            category: decoded.category
+          };
+        });
+
+      return res;
+    }
+
+    function formatTafPeriod(p) {
+      if (!p) return '';
+      const m = p.match(/^(\d{2})(\d{2})\/(\d{2})(\d{2})$/);
+      if (!m) return p;
+      return `Day ${m[1]} ${m[2]}:00Z → Day ${m[3]} ${m[4]}:00Z`;
+    }
+
+    /* =========================================================================
+       6. UNIT FORMATTING HELPERS
+    ========================================================================= */
+    function formatWindSpeed(kt) {
+      if (kt === null || kt === undefined) return '—';
+      if (state.units.wind === 'kmh') return `${Math.round(kt * 1.852)} km/h`;
+      if (state.units.wind === 'ms') return `${(kt * 0.514444).toFixed(1)} m/s`;
+      return `${kt} kt`;
+    }
+
+    function formatWindShort(w) {
+      if (!w || w.raw === null) return '—';
+      if (w.calm) return 'Calm';
+      const dir = w.variable ? 'VRB' : `${String(w.dir).padStart(3, '0')}°`;
+      const spd = formatWindSpeed(w.speedKt);
+      const gst = w.gustKt ? ` G${state.units.wind === 'kt' ? w.gustKt : formatWindSpeed(w.gustKt)}` : '';
+      return `${dir} / ${spd}${gst}`;
+    }
+
+    function formatTemp(c) {
+      if (c === null || c === undefined) return '—';
+      if (state.units.temp === 'F') return `${Math.round((c * 9) / 5 + 32)}°F`;
+      return `${c}°C`;
+    }
+
+    function formatPressure(qnhHpa, qnhInHg) {
+      if (qnhHpa === null) return '—';
+      if (state.units.pressure === 'inHg') return `${qnhInHg.toFixed(2)} inHg`;
+      return `${qnhHpa} hPa`;
+    }
+
+    function formatVis(meters, cavok = false) {
+      if (cavok) return 'CAVOK (10+ km)';
+      if (meters === null) return '—';
+      if (state.units.vis === 'sm') {
+        if (meters >= 10000) return '6.2+ SM';
+        return `${(meters / 1609.34).toFixed(1)} SM`;
+      }
+      if (state.units.vis === 'km') {
+        if (meters >= 10000) return '10+ km';
+        return `${(meters / 1000).toFixed(1)} km`;
+      }
+      if (meters >= 10000) return '10+ km';
+      return `${meters.toLocaleString()} m`;
+    }
+
+    function formatCeiling(ceilFt, cavok, clouds) {
+      if (cavok) return 'CAVOK';
+      if (ceilFt !== null) return `${ceilFt.toLocaleString()} ft`;
+      if (clouds && clouds.length > 0) {
+        const first = clouds[0];
+        if (['NSC', 'SKC', 'CLR', 'NCD'].includes(first.cover)) return first.cover;
+        return `${first.cover} ${first.altFt ? first.altFt.toLocaleString() + ' ft' : ''}`;
+      }
+      return 'No Ceiling';
+    }
+
+    /* =========================================================================
+       7. LIVE CLOCKS (UTC & TEHRAN IRST UTC+3:30)
+    ========================================================================= */
+    function updateClocks() {
+      const now = new Date();
+      const utcStr = `${pad2(now.getUTCHours())}:${pad2(now.getUTCMinutes())}:${pad2(now.getUTCSeconds())}Z`;
+      // Tehran IRST is fixed UTC+3:30 (210 mins)
+      const irstDate = new Date(now.getTime() + 210 * 60000);
+      const irstStr = `IRST ${pad2(irstDate.getUTCHours())}:${pad2(irstDate.getUTCMinutes())}`;
+
+      const utcEl = document.getElementById('clock-utc');
+      const irstEl = document.getElementById('clock-irst');
+      if (utcEl) utcEl.textContent = utcStr;
+      if (irstEl) irstEl.textContent = irstStr;
+    }
+
+    /* =========================================================================
+       8. RENDERING: STATIONS TAB
+    ========================================================================= */
+    function getStationParsed(icao) {
+      const ap = AIRPORT_MAP[icao];
+      const wx = state.weatherData[icao] || { metar: '', taf: '', source: 'IRIMO Ref' };
+      return {
+        airport: ap,
+        raw: wx,
+        metar: parseMETAR(wx.metar, ap ? ap.elev : 0),
+        taf: parseTAF(wx.taf)
+      };
+    }
+
+    function renderStationsTab() {
+      const allParsed = IRAN_AIRPORTS.map(ap => getStationParsed(ap.icao));
+
+      // Compute Category Counts
+      const counts = { ALL: allParsed.length, FAV: 0, VFR: 0, MVFR: 0, IFR: 0, LIFR: 0 };
+      allParsed.forEach(s => {
+        if (state.favorites.includes(s.airport.icao)) counts.FAV++;
+        counts[s.metar.category]++;
+      });
+
+      // Render Summary Strip
+      const summaryEl = document.getElementById('wx-summary-strip');
+      summaryEl.innerHTML = [
+        { k: 'VFR', label: 'VFR', count: counts.VFR, cls: 'text-emerald-400 border-emerald-500/25 bg-emerald-500/10' },
+        { k: 'MVFR', label: 'MVFR', count: counts.MVFR, cls: 'text-blue-400 border-blue-500/25 bg-blue-500/10' },
+        { k: 'IFR', label: 'IFR', count: counts.IFR, cls: 'text-red-400 border-red-500/25 bg-red-500/10' },
+        { k: 'LIFR', label: 'LIFR', count: counts.LIFR, cls: 'text-fuchsia-400 border-fuchsia-500/25 bg-fuchsia-500/10' }
+      ].map(item => `
+        <button onclick="setFilter('${item.k === 'LIFR' ? 'IFR_LIFR' : item.k}')" class="rounded-xl border py-2 px-1 transition active:scale-95 ${item.cls}">
+          <div class="font-mono text-base font-extrabold leading-none tabular-nums">${item.count}</div>
+          <div class="text-[10px] font-bold tracking-wider mt-1 opacity-90">${item.label}</div>
+        </button>
+      `).join('');
+
+      // Render Filter Pills
+      const pills = [
+        { id: 'ALL', label: `All (${counts.ALL})` },
+        { id: 'FAV', label: `★ Favorites (${counts.FAV})` },
+        { id: 'VFR', label: `VFR (${counts.VFR})` },
+        { id: 'MVFR', label: `MVFR (${counts.MVFR})` },
+        { id: 'IFR_LIFR', label: `IFR/LIFR (${counts.IFR + counts.LIFR})` }
+      ];
+      document.getElementById('filter-pills').innerHTML = pills.map(p => {
+        const active = state.filter === p.id;
+        return `<button onclick="setFilter('${p.id}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap border transition ${
+          active
+            ? 'bg-sky-500/20 border-sky-400 text-sky-300 shadow-sm'
+            : 'bg-cockpit-card border-cockpit-border text-slate-400 hover:text-slate-200'
+        }">${p.label}</button>`;
+      }).join('');
+
+      // Filter & Search Stations
+      const q = state.search.trim().toLowerCase();
+      let filtered = allParsed.filter(s => {
+        if (state.filter === 'FAV' && !state.favorites.includes(s.airport.icao)) return false;
+        if (state.filter === 'VFR' && s.metar.category !== 'VFR') return false;
+        if (state.filter === 'MVFR' && s.metar.category !== 'MVFR') return false;
+        if (state.filter === 'IFR_LIFR' && !['IFR', 'LIFR'].includes(s.metar.category)) return false;
+
+        if (q) {
+          const ap = s.airport;
+          const hay = `${ap.icao} ${ap.iata} ${ap.name} ${ap.city} ${ap.persian}`.toLowerCase();
+          return hay.includes(q);
+        }
+        return true;
+      });
+
+      // Sort: Favorites first, then ICAO
+      filtered.sort((a, b) => {
+        const fa = state.favorites.includes(a.airport.icao) ? 0 : 1;
+        const fb = state.favorites.includes(b.airport.icao) ? 0 : 1;
+        if (fa !== fb) return fa - fb;
+        return a.airport.icao.localeCompare(b.airport.icao);
+      });
+
+      const listEl = document.getElementById('stations-list');
+      if (filtered.length === 0) {
+        listEl.innerHTML = `
+          <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-8 text-center space-y-2">
+            <div class="text-slate-300 text-sm font-semibold">No Iranian airports match your filter</div>
+            <p class="text-xs text-cockpit-muted">Try searching by ICAO (e.g., OIII, OIAW), city, or Persian name.</p>
+            <button onclick="resetFilters()" class="mt-2 px-4 py-2 rounded-xl bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-semibold">Show All 30 Stations</button>
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = filtered.map(s => {
+        const { airport: ap, metar: m } = s;
+        const cat = getCategoryMeta(m.category);
+        const isFav = state.favorites.includes(ap.icao);
+        const wxChips = m.weather.map(w => `<span class="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-semibold">${w.text}</span>`).join('');
+
+        return `
+          <article onclick="openStationDetail('${ap.icao}')"
+            class="group relative rounded-2xl bg-cockpit-card hover:bg-cockpit-elevated/90 active:scale-[0.99] border border-cockpit-border p-3.5 cursor-pointer transition shadow-sm">
+            <!-- Left Category Accent Bar -->
+            <div class="absolute left-0 top-3 bottom-3 w-1 rounded-r-full" style="background-color: ${cat.color}"></div>
+
+            <div class="pl-2">
+              <!-- Top Row: ICAO, IATA, Category, Fav Star -->
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-mono text-base font-extrabold text-white tracking-wide">${ap.icao}</span>
+                    <span class="font-mono text-[11px] font-semibold text-sky-300/90 bg-cockpit-bg px-1.5 py-0.5 rounded border border-cockpit-border">${ap.iata}</span>
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${cat.bg} ${cat.border} ${cat.text}">${m.category}</span>
+                    ${m.obsAgeMins !== null ? `<span class="text-[10px] font-mono text-slate-500">${m.obsAgeMins}m ago</span>` : ''}
+                  </div>
+                  <div class="flex items-center gap-2 mt-1 flex-wrap">
+                    <span class="text-xs font-semibold text-slate-200 truncate">${ap.name}</span>
+                    <span class="text-[11px] font-persian text-cockpit-muted">${ap.persian}</span>
+                  </div>
+                </div>
+
+                <!-- Favorite Toggle -->
+                <button onclick="event.stopPropagation(); toggleFavorite('${ap.icao}')" aria-label="Favorite ${ap.icao}"
+                  class="p-2 -mr-1 -mt-1 rounded-xl hover:bg-cockpit-bg transition ${isFav ? 'text-amber-400' : 'text-slate-600 hover:text-slate-300'}">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="${isFav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Weather Metrics Grid -->
+              <div class="grid grid-cols-4 gap-2 mt-3 pt-2.5 border-t border-cockpit-border/70 text-[11px]">
+                <div>
+                  <div class="text-[10px] text-slate-500 uppercase font-semibold">Wind</div>
+                  <div class="font-mono font-semibold text-slate-100 truncate mt-0.5">${formatWindShort(m.wind)}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-slate-500 uppercase font-semibold">Vis</div>
+                  <div class="font-mono font-semibold text-slate-100 truncate mt-0.5">${formatVis(m.visMeters, m.cavok)}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-slate-500 uppercase font-semibold">Ceiling</div>
+                  <div class="font-mono font-semibold text-slate-100 truncate mt-0.5">${formatCeiling(m.ceilingFt, m.cavok, m.clouds)}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-slate-500 uppercase font-semibold">T/Td · QNH</div>
+                  <div class="font-mono font-semibold text-slate-100 truncate mt-0.5">${formatTemp(m.tempC)}/${formatTemp(m.dewC)}</div>
+                  <div class="font-mono text-[10px] text-sky-300/90">${formatPressure(m.qnhHpa, m.qnhInHg)}</div>
+                </div>
+              </div>
+
+              ${wxChips ? `<div class="flex flex-wrap gap-1.5 mt-2">${wxChips}</div>` : ''}
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function setFilter(f) {
+      state.filter = f;
+      renderStationsTab();
+    }
+
+    function resetFilters() {
+      state.filter = 'ALL';
+      state.search = '';
+      document.getElementById('station-search').value = '';
+      document.getElementById('clear-search-btn').classList.add('hidden');
+      renderStationsTab();
+    }
+
+    function clearSearch() {
+      state.search = '';
+      document.getElementById('station-search').value = '';
+      document.getElementById('clear-search-btn').classList.add('hidden');
+      renderStationsTab();
+    }
+
+    function toggleFavorite(icao) {
+      if (state.favorites.includes(icao)) {
+        state.favorites = state.favorites.filter(c => c !== icao);
+        showToast(`${icao} removed from Favorites`);
+      } else {
+        state.favorites.push(icao);
+        showToast(`${icao} added to Favorites ★`);
+      }
+      saveFavoritesToStorage();
+      renderStationsTab();
+      if (state.selectedIcao === icao) updateDetailHeaderFav();
+    }
+
+    /* =========================================================================
+       9. STATION DETAIL DRAWER (Decoded | Raw | Runways | Notes)
+    ========================================================================= */
+    function openStationDetail(icao, initialTab = 'decoded') {
+      state.selectedIcao = icao;
+      state.detailTab = initialTab;
+      // Pick optimal runway automatically on open
+      const parsed = getStationParsed(icao);
+      state.selectedRunwayIdx = findOptimalRunwayEndIndex(parsed.airport, parsed.metar.wind);
+
+      document.getElementById('station-drawer').classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+      renderStationDetail();
+    }
+
+    function closeStationDetail() {
+      document.getElementById('station-drawer').classList.add('hidden');
+      document.body.classList.remove('overflow-hidden');
+      state.selectedIcao = null;
+    }
+
+    function switchDetailTab(tab) {
+      state.detailTab = tab;
+      renderStationDetail();
+    }
+
+    function toggleDetailFavorite() {
+      if (!state.selectedIcao) return;
+      toggleFavorite(state.selectedIcao);
+    }
+
+    function updateDetailHeaderFav() {
+      const btn = document.getElementById('detail-fav-btn');
+      const isFav = state.favorites.includes(state.selectedIcao);
+      btn.className = `p-2.5 rounded-xl bg-cockpit-card border border-cockpit-border transition ${isFav ? 'text-amber-400' : 'text-slate-400 hover:text-amber-300'}`;
+      btn.querySelector('svg').setAttribute('fill', isFav ? 'currentColor' : 'none');
+    }
+
+    function renderStationDetail() {
+      if (!state.selectedIcao) return;
+      const { airport: ap, raw, metar: m, taf } = getStationParsed(state.selectedIcao);
+      const cat = getCategoryMeta(m.category);
+
+      // Update Header
+      document.getElementById('detail-icao').textContent = ap.icao;
+      document.getElementById('detail-iata').textContent = ap.iata;
+      document.getElementById('detail-name').textContent = `${ap.name} (${ap.city})`;
+      document.getElementById('detail-persian').textContent = ap.persian;
+      document.getElementById('detail-elev').textContent = `Elev ${ap.elev.toLocaleString()} ft`;
+      document.getElementById('detail-coords').textContent = `${ap.lat.toFixed(2)}°N ${ap.lon.toFixed(2)}°E`;
+
+      const pill = document.getElementById('detail-cat-pill');
+      pill.textContent = m.category;
+      pill.className = `px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider border ${cat.bg} ${cat.border} ${cat.text}`;
+
+      updateDetailHeaderFav();
+
+      // Banner
+      const banner = document.getElementById('detail-banner');
+      banner.className = `mt-2.5 px-3 py-2 rounded-xl border flex items-center justify-between text-xs ${cat.bg} ${cat.border}`;
+      banner.innerHTML = `
+        <span class="font-bold ${cat.text}">${cat.label}</span>
+        <span class="font-mono text-slate-200 tabular-nums">${m.obsTime || '—'} ${m.obsAgeMins !== null ? `(${m.obsAgeMins}m ago)` : ''}</span>
+      `;
+
+      // Highlight Segmented Tabs
+      document.querySelectorAll('.detail-tab-btn').forEach(btn => {
+        const active = btn.dataset.dtab === state.detailTab;
+        btn.className = `detail-tab-btn py-1.5 rounded-lg text-xs font-bold transition ${
+          active ? 'bg-sky-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+        }`;
+      });
+
+      const body = document.getElementById('detail-body');
+      if (state.detailTab === 'decoded') body.innerHTML = buildDecodedViewHTML(ap, m, taf);
+      else if (state.detailTab === 'raw') body.innerHTML = buildRawViewHTML(raw, m, taf);
+      else if (state.detailTab === 'runways') body.innerHTML = buildRunwaysViewHTML(ap, m);
+      else if (state.detailTab === 'notes') body.innerHTML = buildNotesViewHTML(ap);
+    }
+
+    function buildDecodedViewHTML(ap, m, taf) {
+      // Clouds List
+      let cloudsHtml = `<div class="text-xs text-emerald-300 font-medium">CAVOK — No clouds below 5,000 ft AGL &amp; no CB/TCU</div>`;
+      if (!m.cavok) {
+        if (m.clouds.length === 0) {
+          cloudsHtml = `<div class="text-xs text-slate-400">No cloud layers reported</div>`;
+        } else {
+          cloudsHtml = `<div class="space-y-1.5">` + m.clouds.map(c => {
+            if (['NSC', 'SKC', 'CLR', 'NCD'].includes(c.cover)) {
+              return `<div class="flex items-center justify-between text-xs"><span class="font-mono font-bold text-emerald-400">${c.cover}</span><span class="text-slate-300">No Significant Clouds</span></div>`;
+            }
+            const isCeiling = ['BKN', 'OVC', 'VV'].includes(c.cover);
+            const modBadge = c.modifier
+              ? `<span class="ml-1.5 px-1.5 py-0.5 rounded bg-red-500/20 border border-red-500/40 text-red-300 text-[10px] font-bold">${c.modifier === 'CB' ? 'CB Cumulonimbus' : 'TCU Towering Cu'}</span>`
+              : '';
+            return `
+              <div class="flex items-center justify-between text-xs py-1 px-2.5 rounded-lg bg-cockpit-bg border border-cockpit-border">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono font-bold ${isCeiling ? 'text-sky-300' : 'text-slate-300'}">${c.cover}</span>
+                  <span class="text-slate-300">${CLOUD_MAP[c.cover] || c.cover}</span>
+                  ${modBadge}
+                </div>
+                <span class="font-mono font-semibold text-white">${c.altFt !== null ? c.altFt.toLocaleString() + ' ft AGL' : 'Unknown'}</span>
+              </div>
+            `;
+          }).join('') + `</div>`;
+        }
+      }
+
+      // Weather Phenomena
+      const wxHtml = m.weather.length > 0
+        ? `<div class="flex flex-wrap gap-1.5">${m.weather.map(w => `<span class="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/35 text-amber-200 text-xs font-semibold"><span class="font-mono mr-1.5 text-amber-400">${w.raw}</span>${w.text}</span>`).join('')}</div>`
+        : `<div class="text-xs text-slate-400">No significant weather phenomena reported</div>`;
+
+      // TAF Timeline Cards
+      const tafGroupsHtml = taf.groups.length > 0
+        ? taf.groups.map(g => {
+            const gCat = getCategoryMeta(g.category);
+            const typeColors = {
+              INITIAL: 'bg-sky-500/20 text-sky-300 border-sky-400/30',
+              BECMG: 'bg-indigo-500/20 text-indigo-300 border-indigo-400/30',
+              TEMPO: 'bg-amber-500/20 text-amber-300 border-amber-400/30',
+              FM: 'bg-teal-500/20 text-teal-300 border-teal-400/30'
+            };
+            const tCls = typeColors[g.type] || 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/30';
+            const gWx = g.weather.map(w => w.text).join(', ');
+            const gCld = g.cavok ? 'CAVOK' : (g.clouds.map(c => c.raw).join(' ') || '—');
+
+            return `
+              <div class="rounded-xl bg-cockpit-bg border border-cockpit-border p-3 space-y-2 relative overflow-hidden">
+                <div class="absolute left-0 top-0 bottom-0 w-1" style="background-color:${gCat.color}"></div>
+                <div class="pl-2">
+                  <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <div class="flex items-center gap-2">
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${tCls}">${g.type}</span>
+                      <span class="text-[11px] font-mono text-slate-300">${g.period || 'Forecast Period'}</span>
+                    </div>
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold border ${gCat.bg} ${gCat.border} ${gCat.text}">${g.category}</span>
+                  </div>
+                  <div class="grid grid-cols-3 gap-2 mt-2 text-[11px]">
+                    <div>
+                      <span class="text-slate-500 block text-[10px]">Wind</span>
+                      <span class="font-mono text-slate-100 font-semibold">${formatWindShort(g.wind)}</span>
+                    </div>
+                    <div>
+                      <span class="text-slate-500 block text-[10px]">Visibility</span>
+                      <span class="font-mono text-slate-100 font-semibold">${formatVis(g.visMeters, g.cavok)}</span>
+                    </div>
+                    <div>
+                      <span class="text-slate-500 block text-[10px]">Clouds</span>
+                      <span class="font-mono text-slate-100 font-semibold">${gCld}</span>
+                    </div>
+                  </div>
+                  ${gWx ? `<div class="mt-1.5 text-xs text-amber-300 font-medium">Weather: ${gWx}</div>` : ''}
+                  <div class="mt-1.5 font-mono text-[10px] text-slate-500 break-all">${g.raw}</div>
+                </div>
+              </div>
+            `;
+          }).join('')
+        : `<div class="text-xs text-slate-400">No TAF available for this station.</div>`;
+
+      return `
+        <!-- Decoded METAR Grid -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-sky-400">Decoded METAR</h3>
+            ${m.trend ? `<span class="font-mono text-[11px] px-2 py-0.5 rounded bg-cockpit-card border border-cockpit-border text-slate-300">Trend: ${m.trend}</span>` : ''}
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <!-- Wind Card -->
+            <div class="rounded-xl bg-cockpit-card border border-cockpit-border p-3">
+              <div class="text-[10px] uppercase tracking-wider font-semibold text-cockpit-muted">Surface Wind</div>
+              <div class="font-mono text-base font-bold text-white mt-1">${formatWindShort(m.wind)}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">
+                ${m.wind.varFrom !== null ? `Variable ${String(m.wind.varFrom).padStart(3,'0')}°–${String(m.wind.varTo).padStart(3,'0')}°` : (m.wind.gustKt ? `Gusting to ${formatWindSpeed(m.wind.gustKt)}` : 'Steady wind')}
+              </div>
+            </div>
+
+            <!-- Visibility Card -->
+            <div class="rounded-xl bg-cockpit-card border border-cockpit-border p-3">
+              <div class="text-[10px] uppercase tracking-wider font-semibold text-cockpit-muted">Visibility</div>
+              <div class="font-mono text-base font-bold text-white mt-1">${formatVis(m.visMeters, m.cavok)}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">
+                Ceiling: <span class="font-mono text-slate-200">${formatCeiling(m.ceilingFt, m.cavok, m.clouds)}</span>
+              </div>
+            </div>
+
+            <!-- Temp / Dewpoint / RH -->
+            <div class="rounded-xl bg-cockpit-card border border-cockpit-border p-3">
+              <div class="text-[10px] uppercase tracking-wider font-semibold text-cockpit-muted">Temp / Dewpoint</div>
+              <div class="font-mono text-base font-bold text-white mt-1">${formatTemp(m.tempC)} / ${formatTemp(m.dewC)}</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">
+                Spread: <span class="font-mono text-slate-200">${m.spreadC !== null ? m.spreadC + '°C' : '—'}</span> · RH <span class="font-mono text-sky-300">${m.rhPercent !== null ? m.rhPercent + '%' : '—'}</span>
+              </div>
+            </div>
+
+            <!-- QNH Altimeter -->
+            <div class="rounded-xl bg-cockpit-card border border-cockpit-border p-3">
+              <div class="text-[10px] uppercase tracking-wider font-semibold text-cockpit-muted">Altimeter (QNH)</div>
+              <div class="font-mono text-base font-bold text-sky-300 mt-1">${formatPressure(m.qnhHpa, m.qnhInHg)}</div>
+              <div class="text-[11px] font-mono text-slate-400 mt-0.5">
+                ${m.qnhHpa !== null ? (state.units.pressure === 'hPa' ? `${m.qnhInHg.toFixed(2)} inHg` : `${m.qnhHpa} hPa`) : '—'}
+              </div>
+            </div>
+          </div>
+
+          <!-- Density & Pressure Altitude Bar -->
+          <div class="rounded-xl bg-cockpit-card border border-cockpit-border p-3 grid grid-cols-3 gap-2 text-center">
+            <div>
+              <div class="text-[10px] uppercase text-cockpit-muted font-semibold">Field Elev</div>
+              <div class="font-mono text-sm font-bold text-slate-100 mt-0.5">${ap.elev.toLocaleString()} ft</div>
+            </div>
+            <div class="border-x border-cockpit-border">
+              <div class="text-[10px] uppercase text-cockpit-muted font-semibold">Pressure Alt</div>
+              <div class="font-mono text-sm font-bold text-sky-300 mt-0.5">${m.pressureAltFt !== null ? m.pressureAltFt.toLocaleString() + ' ft' : '—'}</div>
+            </div>
+            <div>
+              <div class="text-[10px] uppercase text-cockpit-muted font-semibold">Density Alt</div>
+              <div class="font-mono text-sm font-bold ${m.densityAltFt > ap.elev + 1500 ? 'text-amber-400' : 'text-emerald-400'} mt-0.5">${m.densityAltFt !== null ? m.densityAltFt.toLocaleString() + ' ft' : '—'}</div>
+            </div>
+          </div>
+
+          <!-- Weather Phenomena -->
+          <div class="rounded-xl bg-cockpit-card border border-cockpit-border p-3 space-y-2">
+            <div class="text-[10px] uppercase tracking-wider font-semibold text-cockpit-muted">Present Weather</div>
+            ${wxHtml}
+            ${m.rvr.length ? `<div class="text-[11px] font-mono text-amber-300 pt-1">RVR: ${m.rvr.join(', ')}</div>` : ''}
+          </div>
+
+          <!-- Clouds -->
+          <div class="rounded-xl bg-cockpit-card border border-cockpit-border p-3 space-y-2">
+            <div class="text-[10px] uppercase tracking-wider font-semibold text-cockpit-muted">Sky &amp; Cloud Layers</div>
+            ${cloudsHtml}
+          </div>
+        </div>
+
+        <!-- Decoded TAF Timeline -->
+        <div class="space-y-2.5 pt-2">
+          <div class="flex items-center justify-between flex-wrap gap-1">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-sky-400">Decoded TAF Forecast</h3>
+            ${taf.validPeriod ? `<span class="text-[11px] font-mono text-cockpit-muted">${formatTafPeriod(taf.validPeriod)}</span>` : ''}
+          </div>
+          <div class="space-y-2">
+            ${tafGroupsHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    function buildRawViewHTML(raw, m, taf) {
+      return `
+        <div class="space-y-4">
+          <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-sky-400">Raw METAR</span>
+              <span class="text-[10px] font-mono text-slate-400">Source: ${raw.source || 'IRIMO Ref'}</span>
+            </div>
+            <pre class="p-3 rounded-xl bg-cockpit-bg border border-cockpit-border font-mono text-xs text-sky-100 whitespace-pre-wrap break-words leading-relaxed">${raw.metar || 'No METAR available'}</pre>
+          </div>
+
+          <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-sky-400">Raw TAF</span>
+              <span class="text-[10px] font-mono text-slate-400">${taf.issueTime ? 'Issued ' + taf.issueTime : ''}</span>
+            </div>
+            <pre class="p-3 rounded-xl bg-cockpit-bg border border-cockpit-border font-mono text-xs text-sky-100 whitespace-pre-wrap break-words leading-relaxed">${raw.taf || 'No TAF available'}</pre>
+          </div>
+
+          <button onclick="copyStationRaw()"
+            class="w-full py-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 font-bold text-xs flex items-center justify-center gap-2 transition">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+            <span>Copy Raw METAR &amp; TAF to Clipboard</span>
+          </button>
+        </div>
+      `;
+    }
+
+    /* =========================================================================
+       10. INTERACTIVE RUNWAY WIND COMPONENT VISUALIZER (SVG + TRIGONOMETRY)
+    ========================================================================= */
+    function getAllRunwayEnds(ap) {
+      const ends = [];
+      ap.runways.forEach(r => {
+        r.ends.forEach(e => {
+          ends.push({
+            name: e.name,
+            hdg: e.hdg,
+            pair: r.id,
+            reciprocalName: r.ends.find(x => x.name !== e.name)?.name || ''
+          });
+        });
+      });
+      return ends;
+    }
+
+    function calcWindComponents(rwyHdg, wind) {
+      if (!wind || wind.calm || wind.speedKt === null || wind.dir === null) {
+        return { headwind: 0, crosswind: 0, gustHead: null, gustCross: null, valid: false };
+      }
+      const rad = ((wind.dir - rwyHdg) * Math.PI) / 180;
+      const headwind = Math.round(wind.speedKt * Math.cos(rad) * 10) / 10;
+      const crosswind = Math.round(wind.speedKt * Math.sin(rad) * 10) / 10;
+      let gustHead = null, gustCross = null;
+      if (wind.gustKt) {
+        gustHead = Math.round(wind.gustKt * Math.cos(rad) * 10) / 10;
+        gustCross = Math.round(wind.gustKt * Math.sin(rad) * 10) / 10;
+      }
+      return { headwind, crosswind, gustHead, gustCross, valid: true };
+    }
+
+    function findOptimalRunwayEndIndex(ap, wind) {
+      const ends = getAllRunwayEnds(ap);
+      if (!wind || wind.dir === null || wind.calm) return 0;
+      let bestIdx = 0;
+      let bestScore = -Infinity;
+      ends.forEach((e, idx) => {
+        const c = calcWindComponents(e.hdg, wind);
+        // Prefer strongest headwind, penalize crosswind
+        const score = c.headwind - Math.abs(c.crosswind) * 0.35;
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = idx;
+        }
+      });
+      return bestIdx;
+    }
+
+    function selectRunwayEnd(idx) {
+      state.selectedRunwayIdx = idx;
+      renderStationDetail();
+    }
+
+    function buildRunwaysViewHTML(ap, m) {
+      const ends = getAllRunwayEnds(ap);
+      const optimalIdx = findOptimalRunwayEndIndex(ap, m.wind);
+      const selIdx = Math.min(state.selectedRunwayIdx, ends.length - 1);
+      const rwy = ends[selIdx];
+      const comp = calcWindComponents(rwy.hdg, m.wind);
+
+      const hwAbs = Math.abs(comp.headwind);
+      const cwAbs = Math.abs(comp.crosswind);
+      const isHead = comp.headwind >= 0;
+      const cwDir = comp.crosswind > 0.2 ? 'From Right' : (comp.crosswind < -0.2 ? 'From Left' : 'Aligned');
+
+      // Compass ticks SVG
+      let ticksSvg = '';
+      for (let deg = 0; deg < 360; deg += 10) {
+        const isMajor = deg % 30 === 0;
+        const r1 = isMajor ? 104 : 110;
+        const r2 = 116;
+        const rad = ((deg - 90) * Math.PI) / 180;
+        const x1 = 140 + r1 * Math.cos(rad);
+        const y1 = 140 + r1 * Math.sin(rad);
+        const x2 = 140 + r2 * Math.cos(rad);
+        const y2 = 140 + r2 * Math.sin(rad);
+        ticksSvg += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${isMajor ? '#64748B' : '#283652'}" stroke-width="${isMajor ? 1.8 : 1}" />`;
+      }
+
+      // Wind Arrow SVG (originates from wind direction outside compass pointing toward center)
+      let windVectorSvg = '';
+      if (m.wind && m.wind.dir !== null && !m.wind.calm) {
+        windVectorSvg = `
+          <g transform="rotate(${m.wind.dir} 140 140)">
+            <line x1="140" y1="26" x2="140" y2="108" stroke="#38BDF8" stroke-width="3.5" stroke-linecap="round" />
+            <polygon points="140,118 133,103 147,103" fill="#38BDF8" />
+            <circle cx="140" cy="26" r="4" fill="#38BDF8" />
+          </g>
+        `;
+      }
+
+      // Runway Switcher Buttons
+      const buttonsHtml = ends.map((e, i) => {
+        const isSel = i === selIdx;
+        const isOpt = i === optimalIdx && m.wind.dir !== null && !m.wind.calm;
+        return `
+          <button onclick="selectRunwayEnd(${i})"
+            class="px-3 py-2 rounded-xl border text-xs font-mono font-bold transition flex items-center gap-1.5 ${
+              isSel
+                ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-md shadow-sky-500/20'
+                : 'bg-cockpit-bg text-slate-200 border-cockpit-border hover:border-slate-500'
+            }">
+            <span>RWY ${e.name}</span>
+            ${isOpt ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-sans font-extrabold uppercase ${isSel ? 'bg-slate-950/20 text-slate-950' : 'bg-emerald-500/20 text-emerald-400'}">Best</span>` : ''}
+          </button>
+        `;
+      }).join('');
+
+      return `
+        <div class="space-y-4">
+          <!-- Runway Selector -->
+          <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-3.5 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-sky-400">Select Active Runway</span>
+              <span class="text-[11px] font-mono text-cockpit-muted">HDG ${String(rwy.hdg).padStart(3, '0')}°</span>
+            </div>
+            <div class="flex flex-wrap gap-2">${buttonsHtml}</div>
+          </div>
+
+          <!-- Interactive Compass & Runway SVG -->
+          <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 flex flex-col items-center">
+            <svg viewBox="0 0 280 280" class="w-full max-w-[270px] h-auto select-none">
+              <!-- Outer Ring -->
+              <circle cx="140" cy="140" r="118" fill="#080E1A" stroke="#1E2D4A" stroke-width="2" />
+              <circle cx="140" cy="140" r="76" fill="none" stroke="#162238" stroke-width="1" stroke-dasharray="3 4" />
+              ${ticksSvg}
+
+              <!-- Cardinal Labels -->
+              <text x="140" y="16" text-anchor="middle" fill="#F87171" font-size="12" font-weight="800" font-family="Inter">N</text>
+              <text x="266" y="144" text-anchor="middle" fill="#94A3B8" font-size="11" font-weight="700" font-family="Inter">E</text>
+              <text x="140" y="272" text-anchor="middle" fill="#94A3B8" font-size="11" font-weight="700" font-family="Inter">S</text>
+              <text x="14" y="144" text-anchor="middle" fill="#94A3B8" font-size="11" font-weight="700" font-family="Inter">W</text>
+
+              <!-- Rotated Runway Strip -->
+              <g transform="rotate(${rwy.hdg} 140 140)">
+                <rect x="125" y="54" width="30" height="172" rx="3" fill="#26334D" stroke="#475569" stroke-width="1.5" />
+                <!-- Threshold Stripes -->
+                <line x1="129" y1="60" x2="129" y2="70" stroke="#CBD5E1" stroke-width="2" />
+                <line x1="134" y1="60" x2="134" y2="70" stroke="#CBD5E1" stroke-width="2" />
+                <line x1="146" y1="60" x2="146" y2="70" stroke="#CBD5E1" stroke-width="2" />
+                <line x1="151" y1="60" x2="151" y2="70" stroke="#CBD5E1" stroke-width="2" />
+                <line x1="129" y1="210" x2="129" y2="220" stroke="#CBD5E1" stroke-width="2" />
+                <line x1="134" y1="210" x2="134" y2="220" stroke="#CBD5E1" stroke-width="2" />
+                <line x1="146" y1="210" x2="146" y2="220" stroke="#CBD5E1" stroke-width="2" />
+                <line x1="151" y1="210" x2="151" y2="220" stroke="#CBD5E1" stroke-width="2" />
+                <!-- Centerline -->
+                <line x1="140" y1="88" x2="140" y2="192" stroke="#E2E8F0" stroke-width="1.6" stroke-dasharray="8 7" />
+                <!-- Approach End Label (Bottom = landing direction upward) -->
+                <text x="140" y="203" text-anchor="middle" fill="#38BDF8" font-size="10" font-weight="800" font-family="JetBrains Mono">${rwy.name}</text>
+                <!-- Reciprocal End Label -->
+                <text x="140" y="84" text-anchor="middle" fill="#94A3B8" font-size="9" font-weight="700" font-family="JetBrains Mono">${rwy.reciprocalName}</text>
+              </g>
+
+              <!-- Wind Vector -->
+              ${windVectorSvg}
+
+              <!-- Center Aircraft Nose Marker -->
+              <circle cx="140" cy="140" r="3.5" fill="#F8FAFC" />
+            </svg>
+
+            <div class="text-xs font-mono text-sky-300 mt-1">
+              Wind: ${formatWindShort(m.wind)}
+            </div>
+          </div>
+
+          <!-- Live Trigonometric Components -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="rounded-2xl bg-cockpit-card border ${isHead ? 'border-emerald-500/35' : 'border-red-500/35'} p-3.5 text-center">
+              <div class="text-[10px] uppercase font-bold tracking-wider ${isHead ? 'text-emerald-400' : 'text-red-400'}">
+                ${isHead ? 'Headwind Component' : 'Tailwind Component'}
+              </div>
+              <div class="font-mono text-xl font-extrabold text-white mt-1 tabular-nums">
+                ${comp.valid ? formatWindSpeed(hwAbs) : '0 kt'}
+              </div>
+              ${comp.gustHead !== null ? `<div class="text-[11px] font-mono text-slate-400 mt-0.5">Gust: ${formatWindSpeed(Math.abs(comp.gustHead))}</div>` : ''}
+            </div>
+
+            <div class="rounded-2xl bg-cockpit-card border ${cwAbs >= 15 ? 'border-amber-500/40' : 'border-cockpit-border'} p-3.5 text-center">
+              <div class="text-[10px] uppercase font-bold tracking-wider ${cwAbs >= 15 ? 'text-amber-400' : 'text-sky-400'}">
+                Crosswind (${cwDir})
+              </div>
+              <div class="font-mono text-xl font-extrabold text-white mt-1 tabular-nums">
+                ${comp.valid ? formatWindSpeed(cwAbs) : '0 kt'}
+              </div>
+              ${comp.gustCross !== null ? `<div class="text-[11px] font-mono text-amber-300 mt-0.5">Gust: ${formatWindSpeed(Math.abs(comp.gustCross))}</div>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    /* =========================================================================
+       11. STATION PILOT NOTES (LocalStorage)
+    ========================================================================= */
+    function buildNotesViewHTML(ap) {
+      const note = state.notes[ap.icao] || '';
+      return `
+        <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 space-y-3">
+          <div>
+            <h3 class="text-sm font-bold text-white">Pilot Notes — ${ap.icao} (${ap.name})</h3>
+            <p class="text-xs text-cockpit-muted mt-0.5">Stored privately on your device (localStorage). Jot down ATIS frequencies, terrain/Alborz wind shear notes, or preferred alternates.</p>
+          </div>
+          <textarea id="station-note-input" rows="7" placeholder="e.g. Watch for Alborz mountain wave turbulence on RWY 29L approach when SW wind > 15 kt..."
+            class="w-full p-3 rounded-xl bg-cockpit-bg border border-cockpit-border text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-sky-400 leading-relaxed">${note.replace(/</g, '&lt;')}</textarea>
+          <button onclick="saveStationNote('${ap.icao}')"
+            class="w-full py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition">
+            Save Pilot Note
+          </button>
+        </div>
+      `;
+    }
+
+    function saveStationNote(icao) {
+      const val = document.getElementById('station-note-input').value.trim();
+      if (val) state.notes[icao] = val;
+      else delete state.notes[icao];
+      saveNotesToStorage();
+      showToast(`Note saved for ${icao}`);
+    }
+
+    /* =========================================================================
+       12. DECODER & IRIMO PASTE / MULTI-BULLETIN IMPORTER
+    ========================================================================= */
+    function loadDecoderPreset(key) {
+      const t = getUtcStamp(-6);
+      const tf = getTafPeriod();
+      const presets = {
+        oiaw_dust: `METAR OIAW ${t} 31024G36KT 1200 BLDU DS SCT030 29/05 Q1009 TEMPO 0800 DS=\nTAF OIAW ${tf.issue} ${tf.valid} 31022G34KT 1500 BLDU SCT035 TEMPO ${tf.p1} 0600 +DS BECMG ${tf.p2} 32012KT 5000 DU NSC=`,
+        oiii_gust: `METAR OIII ${t} 22020G32KT 190V260 4500 -TSRA SCT020CB BKN035 14/08 Q1012 TEMPO 3000 TSRA=\nTAF OIII ${tf.issue} ${tf.valid} 23018G28KT 5000 SHRA BKN025CB TEMPO ${tf.p1} 25024G36KT 3000 TSRA BKN018CB BECMG ${tf.p2} 30010KT CAVOK=`,
+        oigg_fog: `METAR OIGG ${t} 02003KT 0300 R09/0450N FG VV001 10/10 Q1023 NOSIG=\nTAF OIGG ${tf.issue} ${tf.valid} 02004KT 0350 FG VV001 BECMG ${tf.p1} 08006KT 2000 BR BKN006 TEMPO ${tf.p2} 5000 -DZ BKN012=`,
+        multi_batch: `METAR OIII ${t} 28015G25KT 9999 FEW040 17/04 Q1016 NOSIG=\nMETAR OISS ${t} 29010KT CAVOK 21/03 Q1017 NOSIG=\nMETAR OIKB ${t} 18012KT 7000 HZ FEW025 30/22 Q1012 NOSIG=\nTAF OIII ${tf.issue} ${tf.valid} 28014KT 9999 FEW040 BECMG ${tf.p1} 31008KT CAVOK=`
+      };
+      document.getElementById('decoder-input').value = presets[key] || '';
+      decodePreviewOnly();
+    }
+
+    function clearDecoderInput() {
+      document.getElementById('decoder-input').value = '';
+      document.getElementById('decoder-results').innerHTML = '';
+    }
+
+    /**
+     * Splits pasted IRIMO text into individual METAR and TAF bulletins (handles multi-line TAFs).
+     */
+    function extractBulletinsFromText(rawText) {
+      const normalized = rawText.replace(/\r/g, '\n').trim();
+      if (!normalized) return [];
+
+      // Split on explicit '=' delimiters or lines starting with METAR/SPECI/TAF or OI** station codes
+      const lines = normalized.split('\n').map(l => l.trim()).filter(Boolean);
+      const chunks = [];
+      let current = '';
+
+      for (const line of lines) {
+        const startsNew = /^(METAR|SPECI|TAF)\b/i.test(line) || (/^OI[A-Z]{2}\s+\d{6}Z\b/i.test(line) && !/^(BECMG|TEMPO|PROB|FM)/i.test(line));
+        if (startsNew && current) {
+          chunks.push(current.trim());
+          current = line;
+        } else {
+          current = current ? `${current} ${line}` : line;
+        }
+        if (current.endsWith('=')) {
+          chunks.push(current.slice(0, -1).trim());
+          current = '';
+        }
+      }
+      if (current.trim()) chunks.push(current.replace(/=$/, '').trim());
+
+      return chunks.map(c => {
+        const upper = c.toUpperCase();
+        const isTaf = upper.startsWith('TAF ') || /\b\d{4}\/\d{4}\b/.test(upper);
+        const icaoMatch = upper.match(/\b(OI[A-Z]{2})\b/);
+        return {
+          kind: isTaf ? 'TAF' : 'METAR',
+          icao: icaoMatch ? icaoMatch[1] : null,
+          raw: upper
+        };
+      });
+    }
+
+    function renderDecoderPreview(bulletins, savedCount = null) {
+      const out = document.getElementById('decoder-results');
+      if (bulletins.length === 0) {
+        out.innerHTML = `<div class="rounded-xl bg-cockpit-card border border-cockpit-border p-4 text-xs text-slate-400 text-center">Paste at least one METAR or TAF above to decode.</div>`;
+        return;
+      }
+
+      let html = '';
+      if (savedCount !== null) {
+        html += `
+          <div class="rounded-xl bg-emerald-500/15 border border-emerald-500/40 p-3 flex items-center justify-between text-xs text-emerald-300 font-semibold">
+            <span>Updated ${savedCount} Iranian station(s) in your Stations list &amp; cache.</span>
+            <button onclick="switchTab('stations')" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold text-[11px]">View Stations</button>
+          </div>
+        `;
+      }
+
+      html += bulletins.map(b => {
+        const ap = b.icao ? AIRPORT_MAP[b.icao] : null;
+        if (b.kind === 'METAR') {
+          const m = parseMETAR(b.raw, ap ? ap.elev : 0);
+          const cat = getCategoryMeta(m.category);
+          return `
+            <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 space-y-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[10px] font-bold">METAR</span>
+                  <span class="font-mono text-sm font-extrabold text-white">${m.icao || 'UNKNOWN'}</span>
+                  ${ap ? `<span class="text-xs text-slate-300">${ap.name}</span>` : ''}
+                </div>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${cat.bg} ${cat.border} ${cat.text}">${m.category}</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1">
+                <div class="p-2 rounded-lg bg-cockpit-bg"><span class="text-[10px] text-slate-500 block">Wind</span><span class="font-mono font-semibold text-white">${formatWindShort(m.wind)}</span></div>
+                <div class="p-2 rounded-lg bg-cockpit-bg"><span class="text-[10px] text-slate-500 block">Visibility</span><span class="font-mono font-semibold text-white">${formatVis(m.visMeters, m.cavok)}</span></div>
+                <div class="p-2 rounded-lg bg-cockpit-bg"><span class="text-[10px] text-slate-500 block">Temp/Dew</span><span class="font-mono font-semibold text-white">${formatTemp(m.tempC)} / ${formatTemp(m.dewC)}</span></div>
+                <div class="p-2 rounded-lg bg-cockpit-bg"><span class="text-[10px] text-slate-500 block">QNH</span><span class="font-mono font-semibold text-sky-300">${formatPressure(m.qnhHpa, m.qnhInHg)}</span></div>
+              </div>
+              ${m.weather.length ? `<div class="text-xs text-amber-300 font-medium">Weather: ${m.weather.map(w => w.text).join(', ')}</div>` : ''}
+              <div class="text-[11px] font-mono text-slate-400">Ceiling: ${formatCeiling(m.ceilingFt, m.cavok, m.clouds)} ${m.densityAltFt !== null ? `· Density Alt: ${m.densityAltFt.toLocaleString()} ft` : ''}</div>
+              ${ap ? `<button onclick="openStationDetail('${ap.icao}')" class="text-xs font-semibold text-sky-400 hover:underline">Open Full ${ap.icao} Briefing →</button>` : ''}
+            </div>
+          `;
+        } else {
+          const taf = parseTAF(b.raw);
+          return `
+            <div class="rounded-2xl bg-cockpit-card border border-cockpit-border p-4 space-y-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">TAF</span>
+                  <span class="font-mono text-sm font-extrabold text-white">${taf.icao || 'UNKNOWN'}</span>
+                  ${ap ? `<span class="text-xs text-slate-300">${ap.name}</span>` : ''}
+                </div>
+                <span class="text-[10px] font-mono text-slate-400">${taf.groups.length} period(s)</span>
+              </div>
+              <div class="space-y-1.5">
+                ${taf.groups.map(g => {
+                  const gc = getCategoryMeta(g.category);
+                  return `
+                    <div class="p-2 rounded-lg bg-cockpit-bg border border-cockpit-border text-[11px] flex flex-wrap items-center justify-between gap-2">
+                      <span class="font-bold text-sky-300">${g.type} <span class="font-normal text-slate-400">${g.period}</span></span>
+                      <span class="font-mono text-slate-200">${formatWindShort(g.wind)} · ${formatVis(g.visMeters, g.cavok)}</span>
+                      <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${gc.bg} ${gc.text}">${g.category}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }
+      }).join('');
+
+      out.innerHTML = html;
+    }
+
+    function decodePreviewOnly() {
+      const txt = document.getElementById('decoder-input').value;
+      const bulletins = extractBulletinsFromText(txt);
+      renderDecoderPreview(bulletins, null);
+    }
+
+    function parseAndSaveBulletins() {
+      const txt = document.getElementById('decoder-input').value;
+      const bulletins = extractBulletinsFromText(txt);
+      if (bulletins.length === 0) {
+        showToast('Paste a METAR or TAF bulletin first');
+        return;
+      }
+
+      const updatedStations = new Set();
+      bulletins.forEach(b => {
+        if (b.icao && AIRPORT_MAP[b.icao]) {
+          if (!state.weatherData[b.icao]) state.weatherData[b.icao] = { metar: '', taf: '' };
+          if (b.kind === 'METAR') state.weatherData[b.icao].metar = b.raw;
+          else state.weatherData[b.icao].taf = b.raw;
+          state.weatherData[b.icao].source = 'IRIMO Pasted';
+          state.weatherData[b.icao].updatedAt = Date.now();
+          updatedStations.add(b.icao);
+        }
+      });
+
+      if (updatedStations.size > 0) {
+        state.dataSourceLabel = 'IRIMO Imported';
+        updateSourceBadge();
+        saveWeatherToStorage();
+        renderStationsTab();
+        renderIranMap();
+        showToast(`Saved ${updatedStations.size} Iranian station(s)`);
+      } else {
+        showToast('Decoded (no matching OI** station saved)');
+      }
+      renderDecoderPreview(bulletins, updatedStations.size);
+    }
+
+    /* =========================================================================
+       13. INTERACTIVE IRAN SVG MAP (ALL 30 OI** AIRPORTS BY REAL LAT/LON)
+    ========================================================================= */
+    // Geographic projection bounds for Iran
+    const MAP_BOUNDS = { minLon: 43.8, maxLon: 63.8, minLat: 24.5, maxLat: 40.3 };
+
+    function projectToSvg(lat, lon) {
+      const x = ((lon - MAP_BOUNDS.minLon) / (MAP_BOUNDS.maxLon - MAP_BOUNDS.minLon)) * 580 + 30;
+      const y = ((MAP_BOUNDS.maxLat - lat) / (MAP_BOUNDS.maxLat - MAP_BOUNDS.minLat)) * 480 + 30;
+      return { x: +x.toFixed(1), y: +y.toFixed(1) };
+    }
+
+    // Simplified accurate geographic polygon of Iran (lat, lon pairs)
+    const IRAN_BORDER_COORDS = [
+      [39.78, 44.78], [38.88, 46.50], [39.42, 48.02], [38.44, 48.88], [37.45, 49.95],
+      [36.70, 52.65], [37.35, 53.92], [37.98, 55.65], [37.55, 58.35], [36.50, 61.18],
+      [34.10, 60.55], [31.50, 60.88], [29.86, 60.87], [27.20, 63.28], [25.18, 61.48],
+      [25.32, 58.95], [26.05, 57.15], [27.18, 56.28], [26.60, 54.60], [27.38, 52.60],
+      [28.95, 50.80], [30.05, 49.55], [29.95, 48.56], [31.00, 47.95], [32.95, 46.15],
+      [34.35, 45.45], [36.15, 45.40], [37.15, 44.78], [38.50, 44.22], [39.78, 44.78]
+    ];
+
+    function toggleMapLabels() {
+      state.showMapLabels = !state.showMapLabels;
+      document.getElementById('toggle-map-labels').textContent = `Labels: ${state.showMapLabels ? 'ON' : 'OFF'}`;
+      renderIranMap();
+    }
+
+    function selectMapStation(icao) {
+      state.mapSelectedIcao = icao;
+      renderIranMap();
+    }
+
+    function renderIranMap() {
+      const svg = document.getElementById('iran-map-svg');
+      if (!svg) return;
+
+      // Grid lines
+      let gridSvg = '';
+      for (let lon = 46; lon <= 62; lon += 4) {
+        const p1 = projectToSvg(40.2, lon);
+        const p2 = projectToSvg(24.6, lon);
+        gridSvg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="#132038" stroke-width="1" />`;
+        gridSvg += `<text x="${p2.x}" y="530" text-anchor="middle" fill="#334155" font-size="9" font-family="JetBrains Mono">${lon}°E</text>`;
+      }
+      for (let lat = 26; lat <= 38; lat += 4) {
+        const p1 = projectToSvg(lat, 44.0);
+        const p2 = projectToSvg(lat, 63.6);
+        gridSvg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="#132038" stroke-width="1" />`;
+        gridSvg += `<text x="16" y="${p1.y + 3}" text-anchor="middle" fill="#334155" font-size="9" font-family="JetBrains Mono">${lat}°</text>`;
+      }
+
+      // Iran Polygon
+      const polyPoints = IRAN_BORDER_COORDS.map(([la, lo]) => {
+        const pt = projectToSvg(la, lo);
+        return `${pt.x},${pt.y}`;
+      }).join(' ');
+
+      // Water Labels
+      const caspianPt = projectToSvg(38.6, 51.6);
+      const pgPt = projectToSvg(26.6, 51.5);
+      const omanPt = projectToSvg(24.9, 58.2);
+
+      // Station Markers
+      const markersSvg = IRAN_AIRPORTS.map(ap => {
+        const pt = projectToSvg(ap.lat, ap.lon);
+        const parsed = getStationParsed(ap.icao);
+        const cat = getCategoryMeta(parsed.metar.category);
+        const isSel = state.mapSelectedIcao === ap.icao;
+        const isAlert = ['IFR', 'LIFR'].includes(parsed.metar.category);
+
+        // Nudge overlapping Tehran-area labels slightly for crispness
+        let dy = -9;
+        let dx = 0;
+        if (ap.icao === 'OIIE') { dy = 15; }
+        if (ap.icao === 'OIIP') { dx = -24; dy = 2; }
+        if (ap.icao === 'OIBK') { dy = 14; }
+
+        return `
+          <g class="cursor-pointer" onclick="selectMapStation('${ap.icao}')">
+            ${isAlert ? `<circle cx="${pt.x}" cy="${pt.y}" r="6" fill="${cat.color}" class="pulse-dot" />` : ''}
+            ${isSel ? `<circle cx="${pt.x}" cy="${pt.y}" r="11" fill="none" stroke="#38BDF8" stroke-width="2" />` : ''}
+            <circle cx="${pt.x}" cy="${pt.y}" r="${isSel ? 6.5 : 5}" fill="${cat.color}" stroke="#0A101D" stroke-width="1.6" />
+            ${state.showMapLabels ? `
+              <text x="${pt.x + dx}" y="${pt.y + dy}" text-anchor="middle"
+                fill="${isSel ? '#FFFFFF' : '#CBD5E1'}"
+                font-size="${isSel ? '10.5' : '8.8'}" font-weight="${isSel ? '800' : '600'}" font-family="JetBrains Mono"
+                style="paint-order: stroke; stroke: #070C17; stroke-width: 3px; stroke-linejoin: round;">
+                ${ap.icao}
+              </text>
+            ` : ''}
+          </g>
+        `;
+      }).join('');
+
+      svg.innerHTML = `
+        <defs>
+          <radialGradient id="iranGlow" cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stop-color="#1A2945" />
+            <stop offset="100%" stop-color="#0F192D" />
+          </radialGradient>
+        </defs>
+        ${gridSvg}
+        <polygon points="${polyPoints}" fill="url(#iranGlow)" stroke="#334E7A" stroke-width="2" stroke-linejoin="round" />
+        <text x="${caspianPt.x}" y="${caspianPt.y}" text-anchor="middle" fill="#1E3A5F" font-size="11" font-weight="700" letter-spacing="3" font-family="Inter">CASPIAN SEA</text>
+        <text x="${pgPt.x}" y="${pgPt.y}" text-anchor="middle" fill="#1E3A5F" font-size="11" font-weight="700" letter-spacing="2.5" font-family="Inter" transform="rotate(24 ${pgPt.x} ${pgPt.y})">PERSIAN GULF</text>
+        <text x="${omanPt.x}" y="${omanPt.y}" text-anchor="middle" fill="#1E3A5F" font-size="10" font-weight="700" letter-spacing="2" font-family="Inter">GULF OF OMAN</text>
+        ${markersSvg}
+      `;
+
+      // Update Bottom Preview Card
+      const sel = state.mapSelectedIcao ? getStationParsed(state.mapSelectedIcao) : null;
+      const card = document.getElementById('map-selected-card');
+      if (sel && card) {
+        const { airport: ap, metar: m } = sel;
+        const cat = getCategoryMeta(m.category);
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-sm font-extrabold text-white">${ap.icao}</span>
+                <span class="text-xs font-semibold text-slate-300 truncate">${ap.name}</span>
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold border ${cat.bg} ${cat.border} ${cat.text}">${m.category}</span>
+              </div>
+              <div class="flex items-center gap-3 mt-1 font-mono text-[11px] text-slate-300">
+                <span>${formatWindShort(m.wind)}</span>
+                <span>•</span>
+                <span>Vis ${formatVis(m.visMeters, m.cavok)}</span>
+                <span>•</span>
+                <span>${formatTemp(m.tempC)}/${formatTemp(m.dewC)}</span>
+              </div>
+            </div>
+            <button onclick="openStationDetail('${ap.icao}')"
+              class="px-3 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold shrink-0 transition">
+              Briefing
+            </button>
+          </div>
+        `;
+      }
+    }
+
+    /* =========================================================================
+       14. SETTINGS, UNITS, PROXY FETCHER & CLEAR DATA
+    ========================================================================= */
+    function renderSettingsUI() {
+      document.getElementById('proxy-url-input').value = state.proxyUrl || '';
+      document.querySelectorAll('[data-unit-group]').forEach(group => {
+        const key = group.dataset.unitGroup;
+        group.querySelectorAll('.unit-btn').forEach(btn => {
+          const active = state.units[key] === btn.dataset.val;
+          btn.className = `unit-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            active ? 'bg-sky-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+          }`;
+        });
+      });
+    }
+
+    function setUnit(key, val) {
+      state.units[key] = val;
+      saveUnitsToStorage();
+      renderSettingsUI();
+      renderStationsTab();
+      renderIranMap();
+      if (state.selectedIcao) renderStationDetail();
+      showToast(`Units updated (${val})`);
+    }
+
+    async function fetchFromProxy(url) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      try {
+        const resp = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json, text/plain' } });
+        clearTimeout(timeout);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const text = await resp.text();
+
+        let updated = 0;
+        try {
+          const json = JSON.parse(text);
+          // Support object keyed by ICAO or array of {icao, metar, taf}
+          const entries = Array.isArray(json)
+            ? json
+            : Object.entries(json).map(([icao, v]) => ({ icao, ...v }));
+          for (const item of entries) {
+            const code = (item.icao || '').toUpperCase();
+            if (AIRPORT_MAP[code]) {
+              state.weatherData[code] = {
+                metar: item.metar || state.weatherData[code]?.metar || '',
+                taf: item.taf || state.weatherData[code]?.taf || '',
+                source: 'Live Proxy',
+                updatedAt: Date.now()
+              };
+              updated++;
+            }
+          }
+        } catch (_) {
+          // Treat as raw METAR/TAF text stream
+          const bulletins = extractBulletinsFromText(text);
+          bulletins.forEach(b => {
+            if (b.icao && AIRPORT_MAP[b.icao]) {
+              if (!state.weatherData[b.icao]) state.weatherData[b.icao] = { metar: '', taf: '' };
+              if (b.kind === 'METAR') state.weatherData[b.icao].metar = b.raw;
+              else state.weatherData[b.icao].taf = b.raw;
+              state.weatherData[b.icao].source = 'Live Proxy';
+              state.weatherData[b.icao].updatedAt = Date.now();
+              updated++;
+            }
+          });
+        }
+
+        if (updated === 0) throw new Error('No valid Iranian OI** bulletins found in response');
+
+        state.dataSourceLabel = 'Live IRIMO';
+        updateSourceBadge();
+        saveWeatherToStorage();
+        renderStationsTab();
+        renderIranMap();
+        return { ok: true, count: updated };
+      } catch (err) {
+        clearTimeout(timeout);
+        return { ok: false, error: err.message || 'Network/CORS unreachable' };
+      }
+    }
+
+    async function saveAndTestProxy() {
+      const url = document.getElementById('proxy-url-input').value.trim();
+      const box = document.getElementById('proxy-status-box');
+      if (!url) {
+        box.className = 'rounded-xl p-2.5 text-xs border bg-amber-500/10 border-amber-500/30 text-amber-300';
+        box.textContent = 'Enter a valid HTTPS proxy URL first.';
+        return;
+      }
+
+      state.proxyUrl = url;
+      try { localStorage.setItem(STORAGE_KEYS.PROXY, url); } catch (e) {}
+
+      box.className = 'rounded-xl p-2.5 text-xs border bg-sky-500/10 border-sky-400/30 text-sky-300';
+      box.textContent = 'Connecting to IRIMO proxy endpoint...';
+
+      const res = await fetchFromProxy(url);
+      if (res.ok) {
+        box.className = 'rounded-xl p-2.5 text-xs border bg-emerald-500/15 border-emerald-500/40 text-emerald-300';
+        box.textContent = `Success! Synced ${res.count} Iranian airport bulletins live.`;
+        showToast(`Synced ${res.count} live stations`);
+      } else {
+        box.className = 'rounded-xl p-2.5 text-xs border bg-red-500/15 border-red-500/35 text-red-300';
+        box.textContent = `Could not reach proxy (${res.error}). Gracefully using cached/reference IRIMO dataset.`;
+        showToast('Proxy unreachable — using cached data');
+      }
+    }
+
+    function clearProxyUrl() {
+      state.proxyUrl = '';
+      document.getElementById('proxy-url-input').value = '';
+      document.getElementById('proxy-status-box').classList.add('hidden');
+      try { localStorage.removeItem(STORAGE_KEYS.PROXY); } catch (e) {}
+      showToast('Proxy URL cleared');
+    }
+
+    function openClearCacheModal() {
+      const m = document.getElementById('confirm-modal');
+      m.classList.remove('hidden');
+      m.classList.add('flex');
+    }
+
+    function closeClearCacheModal() {
+      const m = document.getElementById('confirm-modal');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    }
+
+    function confirmClearAllData() {
+      try {
+        Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
+      } catch (e) {}
+      state.favorites = ['OIII', 'OIIE', 'OIMM', 'OISS', 'OIFM'];
+      state.notes = {};
+      state.units = { ...DEFAULT_UNITS };
+      state.proxyUrl = '';
+      state.weatherData = buildDefaultDataset();
+      state.dataSourceLabel = 'IRIMO Ref';
+
+      closeClearCacheModal();
+      updateSourceBadge();
+      renderSettingsUI();
+      renderStationsTab();
+      renderIranMap();
+      showToast('All cached data reset');
+    }
+
+    /* =========================================================================
+       15. NAVIGATION, REFRESH, CLIPBOARD & TOAST UTILITIES
+    ========================================================================= */
+    function switchTab(tab) {
+      state.activeTab = tab;
+      ['stations', 'decoder', 'map', 'settings'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
+      });
+      document.querySelectorAll('.nav-tab').forEach(btn => {
+        const active = btn.dataset.tab === tab;
+        btn.className = `nav-tab flex flex-col items-center justify-center py-1.5 rounded-xl transition ${
+          active ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
+        }`;
+      });
+      if (tab === 'map') renderIranMap();
+      if (tab === 'settings') renderSettingsUI();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function updateSourceBadge() {
+      const el = document.getElementById('source-badge');
+      if (!el) return;
+      if (state.dataSourceLabel === 'Live IRIMO') {
+        el.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold tracking-wide uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 shrink-0';
+        el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Live IRIMO`;
+      } else if (state.dataSourceLabel === 'IRIMO Imported') {
+        el.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold tracking-wide uppercase bg-sky-500/15 text-sky-300 border border-sky-400/35 shrink-0';
+        el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>IRIMO Pasted`;
+      } else {
+        el.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold tracking-wide uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0';
+        el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>IRIMO Ref`;
+      }
+    }
+
+    async function handleRefresh() {
+      const icon = document.getElementById('refresh-icon');
+      icon.classList.add('animate-spin-fast');
+
+      if (state.proxyUrl) {
+        const res = await fetchFromProxy(state.proxyUrl);
+        icon.classList.remove('animate-spin-fast');
+        if (res.ok) showToast(`Live sync complete (${res.count} stations)`);
+        else showToast('Proxy unreachable — refreshed local timestamps');
+      } else {
+        // Refresh demo observation timestamps while preserving any pasted stations
+        const fresh = buildDefaultDataset();
+        for (const ap of IRAN_AIRPORTS) {
+          if (!state.weatherData[ap.icao] || state.weatherData[ap.icao].source === 'IRIMO Ref') {
+            state.weatherData[ap.icao] = fresh[ap.icao];
+          }
+        }
+        setTimeout(() => {
+          icon.classList.remove('animate-spin-fast');
+          renderStationsTab();
+          renderIranMap();
+          if (state.selectedIcao) renderStationDetail();
+          showToast('Weather observations refreshed');
+        }, 450);
+      }
+    }
+
+    function copyStationRaw() {
+      if (!state.selectedIcao) return;
+      const wx = state.weatherData[state.selectedIcao];
+      const text = `${wx.metar || ''}\n${wx.taf || ''}`.trim();
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast(`Copied ${state.selectedIcao} METAR & TAF`);
+      } catch (e) {
+        showToast('Copy failed on this browser');
+      }
+      document.body.removeChild(ta);
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      const inner = document.getElementById('toast-inner');
+      inner.textContent = msg;
+      el.classList.remove('opacity-0', '-translate-y-2');
+      el.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        el.classList.add('opacity-0');
+        el.classList.remove('opacity-100');
+      }, 2400);
+    }
+
+    /* =========================================================================
+       16. INITIALIZATION
+    ========================================================================= */
+    function initApp() {
+      loadState();
+      updateSourceBadge();
+      updateClocks();
+      setInterval(updateClocks, 1000);
+
+      // Search Input Listener
+      const searchInput = document.getElementById('station-search');
+      const clearBtn = document.getElementById('clear-search-btn');
+      searchInput.addEventListener('input', (e) => {
+        state.search = e.target.value;
+        clearBtn.classList.toggle('hidden', !state.search);
+        renderStationsTab();
+      });
+
+      // Escape Key Closes Drawer / Modal
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeClearCacheModal();
+          closeStationDetail();
+        }
+      });
+
+      renderStationsTab();
+      renderSettingsUI();
+      renderIranMap();
+    }
+
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
